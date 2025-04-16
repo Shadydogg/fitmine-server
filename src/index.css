@@ -1,9 +1,0 @@
-/* v1.2.1 — src/index.css */
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  @apply font-sans;
-}
