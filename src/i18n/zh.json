@@ -1,0 +1,30 @@
+{
+  "landing": {
+    "description": "健身应用程序，通过活动获得奖励。连接 Google Fit，每天赚取代币！",
+    "start": "开始"
+  },
+  "profile": {
+    "title": "个人资料",
+    "id": "ID",
+    "premium": "高级用户",
+    "username": "用户名",
+    "back": "返回",
+    "notFound": "未找到用户资料",
+    "goDashboard": "进入今日活动"
+  },
+  "dashboard": {
+    "title": "你今天的活动",
+    "loading": "正在加载活动数据...",
+    "motivation": "完成所有环圈即可获得奖励！"
+  },
+  "tooltip": {
+    "steps": "走满 10,000 步以完成此环",
+    "calories": "在一天内燃烧 500 卡路里",
+    "energy": "能量来自步数、卡路里以及 NFT 或 Premium 等加成"
+  },
+  "ring": {
+    "steps": "步数",
+    "calories": "卡路里",
+    "energy": "能量"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "landing": {
+    "description": "Convierte tus pasos en ganancias reales. ¡Conecta Google Fit y gana tokens cada día!",
+    "start": "Comenzar"
+  },
+  "profile": {
+    "title": "Mi perfil",
+    "id": "ID de usuario",
+    "premium": "Premium",
+    "username": "Usuario",
+    "back": "Atrás",
+    "notFound": "Perfil no encontrado",
+    "goDashboard": "Ir a actividad"
+  },
+  "dashboard": {
+    "title": "Tu actividad de hoy",
+    "loading": "Cargando actividad...",
+    "motivation": "¡Completa todos los anillos y gana un bono!"
+  },
+  "tooltip": {
+    "steps": "Da 10.000 pasos para cerrar el anillo",
+    "calories": "Quema 500 calorías en un día",
+    "energy": "La energía proviene de pasos, calorías y bonificaciones como NFT o Premium"
+  },
+  "ring": {
+    "steps": "Pasos",
+    "calories": "Calorías",
+    "energy": "Energía"
+  }
+}
