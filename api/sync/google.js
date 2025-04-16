@@ -1,8 +1,9 @@
+// /api/sync/google.js — v2.1.0
 const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
 const jwt = require('jsonwebtoken');
-const storeUserActivity = require('../../lib/storeUserActivity'); // ✅
+const storeUserActivity = require('../../lib/storeUserActivity');
 
 const GOOGLE_DATA_SOURCE = 'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate';
 
@@ -14,11 +15,19 @@ module.exports = async (req, res) => {
     let telegram_id = null;
 
     if (type === 'Bearer') {
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      telegram_id = payload.telegram_id;
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        telegram_id = payload.telegram_id;
+      } catch {
+        return res.status(401).json({ ok: false, error: 'Неверный JWT токен' });
+      }
     } else if (type === 'tma') {
-      const data = parse(token);
-      telegram_id = data.user?.id;
+      try {
+        const initData = parse(token);
+        telegram_id = initData.user?.id;
+      } catch {
+        return res.status(401).json({ ok: false, error: 'Неверный initData' });
+      }
     }
 
     if (!telegram_id) {
@@ -26,19 +35,19 @@ module.exports = async (req, res) => {
     }
 
     // 🔐 Получаем Google access_token
-    const { data, error } = await supabase
+    const { data: tokenData, error } = await supabase
       .from('google_tokens')
       .select('access_token')
       .eq('telegram_id', telegram_id)
       .single();
 
-    if (error || !data?.access_token) {
+    if (error || !tokenData?.access_token) {
       return res.status(403).json({ ok: false, error: 'Google токен не найден' });
     }
 
-    const access_token = data.access_token;
+    const access_token = tokenData.access_token;
 
-    // 📆 Время за сегодня
+    // 📆 Сегодняшние временные рамки
     const now = Date.now();
     const startTime = new Date();
     startTime.setHours(0, 0, 0, 0);
@@ -55,7 +64,7 @@ module.exports = async (req, res) => {
       endTimeMillis: now
     };
 
-    // 🔁 Запрос к Google Fit
+    // 🔁 Запрос к Google Fit API
     const fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
       headers: {
         Authorization: `Bearer ${access_token}`,
@@ -65,23 +74,22 @@ module.exports = async (req, res) => {
 
     const buckets = fitRes.data.bucket?.[0]?.dataset || [];
 
-    // 📊 Парсим значения
+    // 📊 Парсим данные
     let steps = 0, calories = 0, minutes = 0, distance = 0;
 
     for (const dataset of buckets) {
-      const type = dataset.dataSourceId;
       const point = dataset.point?.[0];
       if (!point) continue;
 
       const val = point.value?.[0]?.intVal || point.value?.[0]?.fpVal || 0;
 
-      if (type.includes('step_count')) steps = val;
-      else if (type.includes('calories')) calories = val;
-      else if (type.includes('active_minutes')) minutes = val;
-      else if (type.includes('distance')) distance = val;
+      if (dataset.dataSourceId.includes('step_count')) steps = val;
+      else if (dataset.dataSourceId.includes('calories')) calories = val;
+      else if (dataset.dataSourceId.includes('active_minutes')) minutes = val;
+      else if (dataset.dataSourceId.includes('distance')) distance = val;
     }
 
-    // 💾 Сохраняем в Supabase через storeUserActivity
+    // 💾 Сохраняем активность
     await storeUserActivity(telegram_id, {
       steps,
       calories,

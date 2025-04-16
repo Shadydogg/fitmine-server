@@ -10,21 +10,19 @@ module.exports = async (req, res) => {
     const { code, state } = req.query;
 
     if (!code || !state) {
-      console.warn('⚠️ code или state отсутствует:', { code, state });
       return res.status(400).json({ ok: false, error: 'Missing code or state' });
     }
 
-    // 🔓 Расшифровываем telegram_id из state
+    // 🔓 Декодируем telegram_id из base64
     const telegram_id = Buffer.from(state, 'base64').toString();
 
     if (!telegram_id || telegram_id.length < 3) {
-      console.warn('⚠️ Ошибка декодинга telegram_id:', telegram_id);
       return res.status(400).json({ ok: false, error: 'Invalid telegram_id' });
     }
 
     console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
 
-    // 🔁 Запрос токенов Google
+    // 🔁 Обмен code на токены Google
     const tokenRes = await axios.post('https://oauth2.googleapis.com/token', null, {
       params: {
         client_id: CLIENT_ID,
@@ -46,15 +44,9 @@ module.exports = async (req, res) => {
       token_type,
     } = tokenRes.data;
 
-    console.log('✅ [Google] Токены получены:', {
-      access_token: access_token?.slice(0, 10) + '...',
-      refresh_token: refresh_token?.slice(0, 10) + '...',
-      scope,
-      token_type,
-      expires_in
-    });
+    console.log('✅ Google токены получены');
 
-    // 💾 Сохраняем токены в Supabase
+    // 💾 Сохраняем в Supabase
     const { error } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
@@ -64,28 +56,47 @@ module.exports = async (req, res) => {
     });
 
     if (error) {
-      console.error('❌ [Supabase] Ошибка сохранения токенов:', error);
+      console.error('❌ Supabase insert error:', error);
       return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
     }
 
-    console.log('💾 [Supabase] Токены успешно сохранены');
+    console.log('💾 Токены сохранены в Supabase');
 
-    // ✅ HTML-ответ
-    return res.send(`
-      <html>
-        <body style="text-align:center;font-family:sans-serif;">
+    // ✅ HTML ответ
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`
+      <!DOCTYPE html>
+      <html lang="ru">
+        <head>
+          <meta charset="UTF-8" />
+          <title>FitMine</title>
+          <style>
+            body {
+              font-family: sans-serif;
+              text-align: center;
+              background: #000;
+              color: #0f0;
+              padding: 2rem;
+            }
+            h2 {
+              font-size: 24px;
+              margin-bottom: 1rem;
+            }
+          </style>
+        </head>
+        <body>
           <h2>✅ Google Fit подключён!</h2>
           <p>Можешь вернуться в Telegram 🤖</p>
           <script>
             setTimeout(() => {
               window.close();
-            }, 2000);
+            }, 2500);
           </script>
         </body>
       </html>
     `);
   } catch (err) {
-    console.error('❌ [OAuth Callback] Ошибка:', err.response?.data || err.message);
+    console.error('❌ Ошибка OAuth Callback:', err.response?.data || err.message);
     return res.status(500).json({ ok: false, error: 'OAuth callback failed' });
   }
 };
