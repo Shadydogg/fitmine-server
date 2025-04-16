@@ -1,11 +1,9 @@
-// ✅ v2.6.5 — Debug Upsert + Token
+// ✅ v3.3.0 — Telegram verify + Access + Refresh + jti
 const { validate, parse } = require('@telegram-apps/init-data-node');
 const supabase = require('../lib/supabase');
-const jwt = require('jsonwebtoken');
+const { generateTokens } = require('../lib/jwt'); // ⬅️ Новый модуль
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const JWT_SECRET = process.env.JWT_SECRET || 'fitmine_super_secret';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '2h';
 
 module.exports = async (req, res) => {
   try {
@@ -16,6 +14,7 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Missing or invalid Authorization header' });
     }
 
+    // 🛡️ Проверка подписи Telegram
     validate(authData, BOT_TOKEN.trim(), { expiresIn: 3600 });
     const initData = parse(authData);
     const user = initData.user;
@@ -23,6 +22,7 @@ module.exports = async (req, res) => {
     console.log('✅ Подпись Telegram корректна!');
     console.log('👤 Пользователь:', user);
 
+    // 🗃️ Обновляем или вставляем пользователя
     const { error } = await supabase
       .from('users')
       .upsert({
@@ -47,11 +47,32 @@ module.exports = async (req, res) => {
 
     console.log(`✅ Пользователь upsert выполнен: telegram_id=${user.id}`);
 
-    const access_token = jwt.sign({ telegram_id: user.id }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN
-    });
+    // 🔐 Генерируем access + refresh токены
+    const { access_token, refresh_token, jti } = generateTokens({ telegram_id: user.id });
 
-    return res.status(200).json({ ok: true, user, access_token });
+    // 💾 Сохраняем jti в token_sessions (можно расширить: user_agent, ip, platform и т.д.)
+    const { error: sessionError } = await supabase
+      .from('token_sessions')
+      .insert({
+        telegram_id: user.id,
+        jti,
+        created_at: new Date().toISOString(),
+        revoked: false
+      });
+
+    if (sessionError) {
+      console.error('⚠️ Ошибка при сохранении сессии:', sessionError.message);
+      // ❗ Не прерываем, продолжаем — но можно добавить лог
+    }
+
+    // 📤 Возвращаем все токены и пользователя
+    return res.status(200).json({
+      ok: true,
+      user,
+      access_token,
+      refresh_token,
+      initData
+    });
 
   } catch (error) {
     console.error('❌ Ошибка в verifyTelegram:', error.message);
