@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing code or state' });
     }
 
-    // 🔓 Декодируем telegram_id из base64 state
+    // 🔓 Декодируем telegram_id из base64
     const telegram_id = Buffer.from(state, 'base64').toString();
 
     if (!telegram_id || telegram_id.length < 3) {
@@ -62,16 +62,35 @@ module.exports = async (req, res) => {
 
     console.log('💾 Токены сохранены в Supabase');
 
-    // ✅ HTML ответ (автозакрытие)
-    return res.send(`
-      <html>
-        <body style="text-align:center;font-family:sans-serif;">
+    // ✅ HTML ответ
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`
+      <!DOCTYPE html>
+      <html lang="ru">
+        <head>
+          <meta charset="UTF-8" />
+          <title>FitMine</title>
+          <style>
+            body {
+              font-family: sans-serif;
+              text-align: center;
+              background: #000;
+              color: #0f0;
+              padding: 2rem;
+            }
+            h2 {
+              font-size: 24px;
+              margin-bottom: 1rem;
+            }
+          </style>
+        </head>
+        <body>
           <h2>✅ Google Fit подключён!</h2>
           <p>Можешь вернуться в Telegram 🤖</p>
           <script>
             setTimeout(() => {
               window.close();
-            }, 2000);
+            }, 2500);
           </script>
         </body>
       </html>

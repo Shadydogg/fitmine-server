@@ -46,7 +46,7 @@ app.post('/webhook', express.json(), (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     ok: true,
-    version: 'FitMine Server v2.5.0',
+    version: 'FitMine Server v2.5.2',
     supabase: `Supabase SDK v${supabaseVersion}`,
     api: [
       '/api/verifyTelegram',
@@ -65,6 +65,19 @@ app.get('/', (req, res) => {
 // ✅ Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 FitMine Server v2.5.0 running on port ${PORT}`);
-  console.log(`🧩 Using Supabase SDK v${supabaseVersion}`);
+  console.log(`🚀 FitMine Server v2.5.2 запущен на порту ${PORT}`);
+  console.log(`🧩 Supabase SDK: v${supabaseVersion}`);
+  console.log(`✅ Telegram Webhook готов к приёму`);
+
+  console.log(`📡 Доступные API маршруты:`);
+  [
+    '/api/verifyTelegram',
+    '/api/profile',
+    '/api/sync',
+    '/api/refresh',
+    '/api/oauth/google',
+    '/api/oauth/callback',
+    '/api/sync/google',
+    '/webhook'
+  ].forEach(route => console.log(`🔹 ${route}`));
 });
