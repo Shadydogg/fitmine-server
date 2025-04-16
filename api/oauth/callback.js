@@ -13,10 +13,16 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing code or state' });
     }
 
-    // 🔓 Расшифровываем telegram_id
+    // 🔓 Декодируем telegram_id из base64 state
     const telegram_id = Buffer.from(state, 'base64').toString();
 
-    // 🔁 Обмен кода на access_token
+    if (!telegram_id || telegram_id.length < 3) {
+      return res.status(400).json({ ok: false, error: 'Invalid telegram_id' });
+    }
+
+    console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
+
+    // 🔁 Обмен code на токены Google
     const tokenRes = await axios.post('https://oauth2.googleapis.com/token', null, {
       params: {
         client_id: CLIENT_ID,
@@ -38,7 +44,9 @@ module.exports = async (req, res) => {
       token_type,
     } = tokenRes.data;
 
-    // 💾 Сохраняем токены в отдельной таблице google_tokens
+    console.log('✅ Google токены получены');
+
+    // 💾 Сохраняем в Supabase
     const { error } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
@@ -48,10 +56,13 @@ module.exports = async (req, res) => {
     });
 
     if (error) {
-      console.error('❌ Ошибка Supabase при сохранении токенов:', error);
+      console.error('❌ Supabase insert error:', error);
       return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
     }
 
+    console.log('💾 Токены сохранены в Supabase');
+
+    // ✅ HTML ответ (автозакрытие)
     return res.send(`
       <html>
         <body style="text-align:center;font-family:sans-serif;">
