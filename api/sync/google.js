@@ -1,8 +1,8 @@
-const supabase = require('../lib/supabase');
+const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
 const jwt = require('jsonwebtoken');
-const storeUserActivity = require('../lib/storeUserActivity'); // ✅
+const storeUserActivity = require('../../lib/storeUserActivity'); // ✅
 
 const GOOGLE_DATA_SOURCE = 'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate';
 
