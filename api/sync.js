@@ -58,7 +58,7 @@ router.post("/", async (req, res) => {
       steps: activity?.steps || 0,
       stepsGoal: 10000,
       calories: activity?.calories || 0,
-      caloriesGoal: 500,
+      caloriesGoal: 2000,
       minutes: activity?.active_minutes || 0,
       hasNFT: !!user.hasNFT,
       isPremium: !!user.is_premium,
