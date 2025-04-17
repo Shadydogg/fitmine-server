@@ -1,4 +1,6 @@
+// /api/oauth/callback.js — v2.4.0
 const axios = require('axios');
+const { parse } = require('@telegram-apps/init-data-node');
 const storeGoogleToken = require('../../lib/storeGoogleToken');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -10,13 +12,17 @@ module.exports = async (req, res) => {
     const { code, state } = req.query;
 
     if (!code || !state) {
+      console.warn('⚠️ code или state отсутствует:', req.query);
       return res.status(400).json({ ok: false, error: 'Missing code or state' });
     }
 
-    // 🔓 Декодируем telegram_id из base64
-    const telegram_id = Buffer.from(state, 'base64').toString();
+    // 🔓 Расшифровываем initDataRaw из state
+    const initDataRaw = Buffer.from(state, 'base64').toString();
+    const parsed = parse(initDataRaw);
+    const telegram_id = parsed?.user?.id;
 
-    if (!telegram_id || telegram_id.length < 3) {
+    if (!telegram_id) {
+      console.warn('⚠️ Не удалось извлечь telegram_id из initData');
       return res.status(400).json({ ok: false, error: 'Invalid telegram_id' });
     }
 
@@ -46,7 +52,7 @@ module.exports = async (req, res) => {
 
     console.log('✅ Google токены получены');
 
-    // 💾 Сохраняем в Supabase
+    // 💾 Сохраняем токены в Supabase
     const { error } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
@@ -60,9 +66,9 @@ module.exports = async (req, res) => {
       return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
     }
 
-    console.log('💾 Токены сохранены в Supabase');
+    console.log('💾 Токены успешно сохранены в Supabase');
 
-    // ✅ HTML ответ
+    // ✅ Ответ в браузер
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`
       <!DOCTYPE html>
