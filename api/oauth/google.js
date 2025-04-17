@@ -1,5 +1,4 @@
-const { parse } = require('@telegram-apps/init-data-node');
-
+const { validate, parse } = require('@telegram-apps/init-data-node');
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
 
@@ -11,22 +10,23 @@ const GOOGLE_SCOPES = [
 
 module.exports = async (req, res) => {
   try {
-    const { state } = req.query;
+    const authHeader = req.headers.authorization || '';
+    const [type, initDataRaw] = authHeader.split(' ');
 
-    if (!state) {
-      return res.status(400).json({ ok: false, error: 'Missing Telegram initData' });
+    if (type !== 'tma' || !initDataRaw) {
+      return res.status(401).json({ ok: false, error: 'Missing Telegram initData' });
     }
 
-    // 🔓 Декодируем initData из base64 → распарсим
-    const initDataRaw = Buffer.from(state, 'base64').toString();
+    // ✅ Валидация
+    validate(initDataRaw, process.env.BOT_TOKEN);
     const parsed = parse(initDataRaw);
     const telegramId = parsed?.user?.id;
 
     if (!telegramId) {
-      return res.status(400).json({ ok: false, error: 'Invalid initData: no telegram_id' });
+      return res.status(400).json({ ok: false, error: 'Invalid Telegram user ID' });
     }
 
-    // 🔐 Шифруем telegram_id в state (в виде base64)
+    // ✅ Передаём telegram_id в state
     const encodedTelegramId = Buffer.from(`${telegramId}`).toString('base64');
 
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('scope', GOOGLE_SCOPES);
     url.searchParams.set('prompt', 'consent');
-    url.searchParams.set('state', encodedTelegramId); // будет расшифрован в callback.js
+    url.searchParams.set('state', encodedTelegramId); // telegram_id в state
 
     return res.redirect(url.toString());
   } catch (err) {
