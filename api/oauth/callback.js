@@ -1,6 +1,5 @@
-// /api/oauth/callback.js — v2.4.0
 const axios = require('axios');
-const { parse } = require('@telegram-apps/init-data-node');
+const { validate, parse } = require('@telegram-apps/init-data-node');
 const storeGoogleToken = require('../../lib/storeGoogleToken');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -12,23 +11,26 @@ module.exports = async (req, res) => {
     const { code, state } = req.query;
 
     if (!code || !state) {
-      console.warn('⚠️ code или state отсутствует:', req.query);
+      console.warn('⚠️ code или state отсутствует:', { code, state });
       return res.status(400).json({ ok: false, error: 'Missing code or state' });
     }
 
-    // 🔓 Расшифровываем initDataRaw из state
+    // ✅ Расшифровываем initDataRaw
     const initDataRaw = Buffer.from(state, 'base64').toString();
+
+    // ✅ Проверяем подпись Telegram
+    validate(initDataRaw, process.env.BOT_TOKEN);
     const parsed = parse(initDataRaw);
     const telegram_id = parsed?.user?.id;
 
     if (!telegram_id) {
-      console.warn('⚠️ Не удалось извлечь telegram_id из initData');
-      return res.status(400).json({ ok: false, error: 'Invalid telegram_id' });
+      console.warn('⚠️ Ошибка извлечения telegram_id:', parsed);
+      return res.status(400).json({ ok: false, error: 'Invalid Telegram user' });
     }
 
     console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
 
-    // 🔁 Обмен code на токены Google
+    // 🔁 Запрос токенов у Google
     const tokenRes = await axios.post('https://oauth2.googleapis.com/token', null, {
       params: {
         client_id: CLIENT_ID,
@@ -50,9 +52,9 @@ module.exports = async (req, res) => {
       token_type,
     } = tokenRes.data;
 
-    console.log('✅ Google токены получены');
+    console.log('✅ [Google] Токены получены');
 
-    // 💾 Сохраняем токены в Supabase
+    // 💾 Сохраняем в Supabase
     const { error } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
@@ -62,13 +64,13 @@ module.exports = async (req, res) => {
     });
 
     if (error) {
-      console.error('❌ Supabase insert error:', error);
+      console.error('❌ [Supabase] Ошибка сохранения токенов:', error);
       return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
     }
 
-    console.log('💾 Токены успешно сохранены в Supabase');
+    console.log('💾 [Supabase] Токены успешно сохранены');
 
-    // ✅ Ответ в браузер
+    // ✅ HTML-ответ
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(`
       <!DOCTYPE html>
@@ -102,7 +104,7 @@ module.exports = async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error('❌ Ошибка OAuth Callback:', err.response?.data || err.message);
+    console.error('❌ [OAuth Callback] Ошибка:', err.response?.data || err.message);
     return res.status(500).json({ ok: false, error: 'OAuth callback failed' });
   }
 };
