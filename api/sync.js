@@ -1,4 +1,4 @@
-// sync.js — v1.5.1 (Express Router + JWT)
+// /api/sync.js — v2.0.0
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const supabase = require("../lib/supabase");
@@ -25,23 +25,41 @@ router.post("/", async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
 
-    const { data: user, error } = await supabase
+    // Получаем профиль
+    const { data: user, error: userError } = await supabase
       .from("users")
       .select("*")
       .eq("telegram_id", telegram_id)
       .single();
 
-    if (error || !user) {
-      console.warn("⚠️ User not found in Supabase:", error);
+    if (userError || !user) {
+      console.warn("⚠️ User not found in Supabase:", userError);
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Получаем активность за сегодня
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { data: activity, error: activityError } = await supabase
+      .from("user_activity")
+      .select("*")
+      .eq("telegram_id", telegram_id)
+      .gte("date", today.toISOString())
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (activityError) {
+      console.warn("⚠️ Нет данных активности за сегодня:", activityError.message);
+    }
+
     return res.status(200).json({
-      steps: user.steps || 0,
+      steps: activity?.steps || 0,
       stepsGoal: 10000,
-      calories: user.calories || 0,
+      calories: activity?.calories || 0,
       caloriesGoal: 500,
-      minutes: user.minutes || 0,
+      minutes: activity?.active_minutes || 0,
       hasNFT: !!user.hasNFT,
       isPremium: !!user.is_premium,
       isEarlyAccess: !!user.isEarlyAccess
