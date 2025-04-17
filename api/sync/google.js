@@ -3,6 +3,7 @@ const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
 const jwt = require('jsonwebtoken');
 const storeUserActivity = require('../../lib/storeUserActivity');
+const refreshGoogleToken = require('../../lib/refreshGoogleToken'); // ✅ новое подключение
 
 const GOOGLE_DATA_SOURCE = 'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate';
 
@@ -33,7 +34,8 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Не удалось определить telegram_id' });
     }
 
-    const { data: tokenData, error } = await supabase
+    // Получаем текущий access_token
+    let { data: tokenData, error } = await supabase
       .from('google_tokens')
       .select('access_token')
       .eq('telegram_id', telegram_id)
@@ -43,7 +45,7 @@ module.exports = async (req, res) => {
       return res.status(403).json({ ok: false, error: 'Google токен не найден' });
     }
 
-    const access_token = tokenData.access_token;
+    let access_token = tokenData.access_token;
 
     const now = Date.now();
     const startTime = new Date();
@@ -61,12 +63,36 @@ module.exports = async (req, res) => {
       endTimeMillis: now
     };
 
-    const fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    // 🔁 Запрос к Google Fit API (с автоматическим обновлением токена при 401)
+    let fitRes;
+    try {
+      fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
+    } catch (error) {
+      if (error.response?.status === 401) {
+        console.warn('⚠️ Access token просрочен, пробуем обновить...');
+        const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
+        if (refreshError || !new_token) {
+          return res.status(401).json({ ok: false, error: 'Google token refresh failed' });
+        }
+
+        access_token = new_token;
+
+        // Повторный запрос
+        fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            "Content-Type": "application/json",
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
 
     const buckets = fitRes.data.bucket?.[0]?.dataset || [];
 
