@@ -1,91 +1,46 @@
-const axios = require('axios');
-const storeGoogleToken = require('../../lib/storeGoogleToken');
+const { parse } = require('@telegram-apps/init-data-node');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/fitness.activity.read',
+  'https://www.googleapis.com/auth/fitness.location.read',
+  'https://www.googleapis.com/auth/fitness.body.read'
+].join(' ');
 
 module.exports = async (req, res) => {
   try {
-    const { code, state } = req.query;
+    const { state } = req.query;
 
-    if (!code || !state) {
-      console.warn('⚠️ code или state отсутствует:', { code, state });
-      return res.status(400).json({ ok: false, error: 'Missing code or state' });
+    if (!state) {
+      return res.status(400).json({ ok: false, error: 'Missing Telegram initData' });
     }
 
-    // 🔓 Расшифровываем telegram_id из state
-    const telegram_id = Buffer.from(state, 'base64').toString();
+    // 🔓 Декодируем initData из base64 → распарсим
+    const initDataRaw = Buffer.from(state, 'base64').toString();
+    const parsed = parse(initDataRaw);
+    const telegramId = parsed?.user?.id;
 
-    if (!telegram_id || telegram_id.length < 3) {
-      console.warn('⚠️ Ошибка декодинга telegram_id:', telegram_id);
-      return res.status(400).json({ ok: false, error: 'Invalid telegram_id' });
+    if (!telegramId) {
+      return res.status(400).json({ ok: false, error: 'Invalid initData: no telegram_id' });
     }
 
-    console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
+    // 🔐 Шифруем telegram_id в state (в виде base64)
+    const encodedTelegramId = Buffer.from(`${telegramId}`).toString('base64');
 
-    // 🔁 Запрос токенов Google
-    const tokenRes = await axios.post('https://oauth2.googleapis.com/token', null, {
-      params: {
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
-        grant_type: 'authorization_code',
-        code,
-      },
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    });
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.searchParams.set('client_id', CLIENT_ID);
+    url.searchParams.set('redirect_uri', REDIRECT_URI);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('scope', GOOGLE_SCOPES);
+    url.searchParams.set('prompt', 'consent');
+    url.searchParams.set('state', encodedTelegramId); // будет расшифрован в callback.js
 
-    const {
-      access_token,
-      refresh_token,
-      expires_in,
-      scope,
-      token_type,
-    } = tokenRes.data;
-
-    console.log('✅ [Google] Токены получены:', {
-      access_token: access_token?.slice(0, 10) + '...',
-      refresh_token: refresh_token?.slice(0, 10) + '...',
-      scope,
-      token_type,
-      expires_in
-    });
-
-    // 💾 Сохраняем токены в Supabase
-    const { error } = await storeGoogleToken(telegram_id, {
-      access_token,
-      refresh_token,
-      scope,
-      token_type,
-      expires_in,
-    });
-
-    if (error) {
-      console.error('❌ [Supabase] Ошибка сохранения токенов:', error);
-      return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
-    }
-
-    console.log('💾 [Supabase] Токены успешно сохранены');
-
-    // ✅ HTML-ответ
-    return res.send(`
-      <html>
-        <body style="text-align:center;font-family:sans-serif;">
-          <h2>✅ Google Fit подключён!</h2>
-          <p>Можешь вернуться в Telegram 🤖</p>
-          <script>
-            setTimeout(() => {
-              window.close();
-            }, 2000);
-          </script>
-        </body>
-      </html>
-    `);
+    return res.redirect(url.toString());
   } catch (err) {
-    console.error('❌ [OAuth Callback] Ошибка:', err.response?.data || err.message);
-    return res.status(500).json({ ok: false, error: 'OAuth callback failed' });
+    console.error('❌ Google OAuth Error:', err.message);
+    return res.status(500).json({ ok: false, error: 'Google OAuth init failed' });
   }
 };
