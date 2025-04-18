@@ -19,6 +19,8 @@ const sync = require('./api/sync');
 const refresh = require('./api/refresh');
 const oauthCallback = require('./api/oauth/callback');
 const syncGoogle = require('./api/sync/google');
+const nft = require('./api/nft');
+const nftUpgrade = require('./api/nft/upgrade');
 const bot = require('./bot/bot');
 
 // ✅ Подключение маршрутов
@@ -28,6 +30,8 @@ app.use('/api/sync', sync);
 app.use('/api/refresh', refresh);
 app.get('/api/oauth/callback', oauthCallback);
 app.post('/api/sync/google', syncGoogle);
+app.use('/api/nft', nft);
+app.post('/api/nft/upgrade', nftUpgrade);
 
 // ✅ Webhook от Telegram Bot API
 app.post('/webhook', express.json(), (req, res) => {
@@ -53,6 +57,8 @@ app.get('/', (req, res) => {
       '/api/refresh',
       '/api/oauth/callback',
       '/api/sync/google',
+      '/api/nft',
+      '/api/nft/upgrade',
       '/webhook'
     ],
     message: 'Telegram Webhook активен ✅, Supabase подключён 🚀'
@@ -74,6 +80,8 @@ app.listen(PORT, () => {
     '/api/refresh',
     '/api/oauth/callback',
     '/api/sync/google',
+    '/api/nft',
+    '/api/nft/upgrade',
     '/webhook'
   ].forEach(route => console.log(`🔹 ${route}`));
 });
