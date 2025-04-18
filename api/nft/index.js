@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
   const { data, error } = await supabase
     .from('nft_miners')
     .select('*')
-    .eq('user_id', user.id);
+    .eq('telegram_id', user.telegram_id);
 
   if (error) {
     console.error('[NFT API] Ошибка загрузки NFT:', error);
