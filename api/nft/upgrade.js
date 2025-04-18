@@ -1,8 +1,8 @@
-// 📄 server/api/nft/upgrade.js — v1.0.0
+// 📄 server/api/nft/upgrade.js — v1.0.1
 
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../../lib/supabase');
+const supabase = require('../../lib/supabase');
 const { verifyToken } = require('../../lib/jwt');
 
 router.post('/', async (req, res) => {
