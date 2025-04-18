@@ -1,3 +1,4 @@
+// 📄 server/api/land/create.js — v1.1.0 (поддержка telegram_id и кастомных полей Supabase)
 const express = require("express");
 const router = express.Router();
 const supabase = require("../../lib/supabase");
@@ -12,35 +13,33 @@ const rarityChances = [
   { rarity: "mythical", weight: 2 },
 ];
 
-// 🎯 Слоты и множители по редкости
 const rarityAttributes = {
   common: { slots: 2, bonus: [1.01, 1.05] },
-  rare: { slots: 3, bonus: [1.06, 1.10] },
+  rare: { slots: 3, bonus: [1.06, 1.1] },
   epic: { slots: 4, bonus: [1.15, 1.25] },
-  legendary: { slots: 5, bonus: [1.30, 1.50] },
-  mythical: { slots: 6, bonus: [1.80, 2.00] },
+  legendary: { slots: 5, bonus: [1.3, 1.5] },
+  mythical: { slots: 6, bonus: [1.6, 2.0] },
 };
 
-// 📛 Генерация названия земли
 function generateName() {
-  const prefixes = ["Crystal", "Genesis", "Iron", "Ember", "Shadow", "Nebula"];
-  const suffixes = ["Valley", "Crater", "Ridge", "Fields", "Wastes", "Citadel"];
-  return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${suffixes[Math.floor(Math.random() * suffixes.length)]}`;
+  const prefixes = ["Genesis", "Crystal", "Shadow", "Iron", "Nova", "Ember"];
+  const suffixes = ["Valley", "Crater", "Ridge", "Citadel", "Fields", "Zone"];
+  return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${
+    suffixes[Math.floor(Math.random() * suffixes.length)]
+  }`;
 }
 
-// 🎲 Определение редкости
 function getRandomRarity() {
   const totalWeight = rarityChances.reduce((acc, r) => acc + r.weight, 0);
-  const rand = Math.random() * totalWeight;
+  const roll = Math.random() * totalWeight;
   let sum = 0;
   for (const r of rarityChances) {
     sum += r.weight;
-    if (rand <= sum) return r.rarity;
+    if (roll <= sum) return r.rarity;
   }
   return "common";
 }
 
-// 🚀 POST /api/land/create
 router.post("/", async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "Missing authorization" });
@@ -53,17 +52,21 @@ router.post("/", async (req, res) => {
   const attributes = rarityAttributes[rarity];
   const bonus = parseFloat((Math.random() * (attributes.bonus[1] - attributes.bonus[0]) + attributes.bonus[0]).toFixed(3));
   const name = req.body.name || generateName();
+  const image = `/land/${name.toLowerCase().replace(/\s+/g, "-")}.png`;
+  const description = "Новая земля, готовая к добыче энергии.";
 
   const { data, error } = await supabase
     .from("land_nfts")
     .insert([
       {
-        user_id: user.id, // Telegram ID напрямую
+        telegram_id: user.id,
         name,
         rarity,
-        bonusMultiplier: bonus,
+        bonus_multiplier: bonus,
         slots: attributes.slots,
-        connectedMinerIds: [],
+        connected_miner_ids: [],
+        image,
+        description,
         created_at: new Date().toISOString(),
       },
     ])
