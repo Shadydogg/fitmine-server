@@ -1,3 +1,5 @@
+// index.js — FitMine Server v2.5.4 (Полная сборка с EP)
+
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -26,6 +28,10 @@ const landUpdate = require('./api/land/update');
 const landCreate = require('./api/land/create');
 const bot = require('./bot/bot');
 
+// ✅ Новые маршруты EP-модуля
+const epHandler = require('./api/ep');
+const epClaim = require('./api/ep/claim');
+
 // ✅ Подключение маршрутов
 app.use('/api/verifyTelegram', verifyTelegram);
 app.use('/api/profile', profile);
@@ -38,6 +44,10 @@ app.post('/api/nft/upgrade', nftUpgrade);
 app.use('/api/land', land);
 app.post('/api/land/update', landUpdate);
 app.post('/api/land/create', landCreate);
+
+// ✅ EP API
+app.post('/api/ep', epHandler);
+app.post('/api/ep/claim', epClaim);
 
 // ✅ Webhook от Telegram Bot API
 app.post('/webhook', express.json(), (req, res) => {
@@ -54,7 +64,7 @@ app.post('/webhook', express.json(), (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     ok: true,
-    version: 'FitMine Server v2.5.3',
+    version: 'FitMine Server v2.5.4',
     supabase: `Supabase SDK v${supabaseVersion}`,
     api: [
       '/api/verifyTelegram',
@@ -68,6 +78,8 @@ app.get('/', (req, res) => {
       '/api/land',
       '/api/land/update',
       '/api/land/create',
+      '/api/ep',
+      '/api/ep/claim',
       '/webhook'
     ],
     message: 'Telegram Webhook активен ✅, Supabase подключён 🚀'
@@ -77,7 +89,7 @@ app.get('/', (req, res) => {
 // ✅ Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 FitMine Server v2.5.3 запущен на порту ${PORT}`);
+  console.log(`🚀 FitMine Server v2.5.4 запущен на порту ${PORT}`);
   console.log(`🧩 Supabase SDK: v${supabaseVersion}`);
   console.log(`✅ Telegram Webhook готов к приёму`);
 
@@ -94,6 +106,8 @@ app.listen(PORT, () => {
     '/api/land',
     '/api/land/update',
     '/api/land/create',
+    '/api/ep',
+    '/api/ep/claim',
     '/webhook'
   ].forEach(route => console.log(`🔹 ${route}`));
 });
