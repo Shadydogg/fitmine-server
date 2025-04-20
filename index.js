@@ -1,4 +1,4 @@
-// index.js — FitMine Server v2.5.4 (Полная сборка с EP)
+// index.js — FitMine Server v2.6.1 (полная защита JWT + корректные методы)
 
 const express = require('express');
 const cors = require('cors');
@@ -26,11 +26,9 @@ const nftUpgrade = require('./api/nft/upgrade');
 const land = require('./api/land');
 const landUpdate = require('./api/land/update');
 const landCreate = require('./api/land/create');
-const bot = require('./bot/bot');
-
-// ✅ Новые маршруты EP-модуля
 const epHandler = require('./api/ep');
 const epClaim = require('./api/ep/claim');
+const bot = require('./bot/bot');
 
 // ✅ Подключение маршрутов
 app.use('/api/verifyTelegram', verifyTelegram);
@@ -45,8 +43,8 @@ app.use('/api/land', land);
 app.post('/api/land/update', landUpdate);
 app.post('/api/land/create', landCreate);
 
-// ✅ EP API
-app.post('/api/ep', epHandler);
+// ✅ EP API — исправлено на GET
+app.get('/api/ep', epHandler);
 app.post('/api/ep/claim', epClaim);
 
 // ✅ Webhook от Telegram Bot API
@@ -64,7 +62,7 @@ app.post('/webhook', express.json(), (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     ok: true,
-    version: 'FitMine Server v2.5.4',
+    version: 'FitMine Server v2.6.1',
     supabase: `Supabase SDK v${supabaseVersion}`,
     api: [
       '/api/verifyTelegram',
@@ -89,7 +87,7 @@ app.get('/', (req, res) => {
 // ✅ Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 FitMine Server v2.5.4 запущен на порту ${PORT}`);
+  console.log(`🚀 FitMine Server v2.6.1 запущен на порту ${PORT}`);
   console.log(`🧩 Supabase SDK: v${supabaseVersion}`);
   console.log(`✅ Telegram Webhook готов к приёму`);
 
