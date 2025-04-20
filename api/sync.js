@@ -1,7 +1,7 @@
-// /api/sync.js — v2.1.0 (JWT + jti через verifyAccessToken)
+// /api/sync.js — v2.2.0 (добавлена метрика distance и distanceGoal)
 const express = require("express");
 const supabase = require("../lib/supabase");
-const verifyAccessToken = require("../lib/verifyAccessToken"); // ✅
+const verifyAccessToken = require("../lib/verifyAccessToken");
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ router.post("/", async (req, res) => {
   try {
     console.log("📥 [SYNC] POST /api/sync called");
 
-    const payload = await verifyAccessToken(req); // ✅ telegram_id + jti валидны
+    const payload = await verifyAccessToken(req);
     const telegram_id = payload.telegram_id;
 
     // Получаем профиль пользователя
@@ -46,6 +46,8 @@ router.post("/", async (req, res) => {
       stepsGoal: 10000,
       calories: activity?.calories || 0,
       caloriesGoal: 2000,
+      distance: activity?.distance || 0,
+      distanceGoal: 5,
       minutes: activity?.active_minutes || 0,
       hasNFT: !!user.hasNFT,
       isPremium: !!user.is_premium,
