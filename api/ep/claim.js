@@ -1,4 +1,4 @@
-// /api/ep/claim.js — v2.0.0 (JWT + jti проверка)
+// /api/ep/claim.js — v2.1.0 (JWT + jti + безопасный fetch)
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 const supabase = require("../../lib/supabase");
 
@@ -17,13 +17,17 @@ module.exports = async function handler(req, res) {
       .select("ep, ep_reward_claimed")
       .eq("telegram_id", telegram_id)
       .eq("date", today)
-      .single();
+      .maybeSingle(); // ✅ безопаснее чем .single()
 
-    if (fetchError) {
+    if (fetchError && fetchError.code !== 'PGRST116') {
       return res.status(500).json({ error: "Failed to fetch user_activity", details: fetchError.message });
     }
 
-    if (!data || data.ep < 1000) {
+    if (!data) {
+      return res.status(400).json({ error: "No activity data for today" });
+    }
+
+    if (data.ep < 1000) {
       return res.status(400).json({ error: "EP goal not reached yet" });
     }
 
@@ -43,6 +47,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ ok: true, reward: "xp_box_1" });
   } catch (err) {
+    console.error("❌ /api/ep/claim ERROR:", err);
     return res.status(401).json({ error: err.message });
   }
 };
