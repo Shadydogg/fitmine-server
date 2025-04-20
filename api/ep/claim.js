@@ -1,6 +1,6 @@
 // /api/ep/claim.js — v2.0.0 (JWT + jti проверка)
-const verifyAccessToken = require("../lib/verifyAccessToken");
-const supabase = require("../lib/supabase");
+const verifyAccessToken = require("../../lib/verifyAccessToken");
+const supabase = require("../../lib/supabase");
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
