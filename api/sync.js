@@ -1,31 +1,18 @@
-// /api/sync.js — v2.0.0
+// /api/sync.js — v2.1.0 (JWT + jti через verifyAccessToken)
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const supabase = require("../lib/supabase");
+const verifyAccessToken = require("../lib/verifyAccessToken"); // ✅
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "fitmine_super_secret";
 
 router.post("/", async (req, res) => {
   try {
     console.log("📥 [SYNC] POST /api/sync called");
 
-    const authHeader = req.headers.authorization || "";
-    const [type, token] = authHeader.split(" ");
+    const payload = await verifyAccessToken(req); // ✅ telegram_id + jti валидны
+    const telegram_id = payload.telegram_id;
 
-    if (type !== "Bearer" || !token) {
-      return res.status(401).json({ error: "Missing or invalid Authorization header" });
-    }
-
-    let telegram_id;
-    try {
-      const payload = jwt.verify(token, JWT_SECRET);
-      telegram_id = payload.telegram_id;
-    } catch (err) {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-
-    // Получаем профиль
+    // Получаем профиль пользователя
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("*")
@@ -33,7 +20,7 @@ router.post("/", async (req, res) => {
       .single();
 
     if (userError || !user) {
-      console.warn("⚠️ User not found in Supabase:", userError);
+      console.warn("⚠️ User not found in Supabase:", userError?.message);
       return res.status(404).json({ error: "User not found" });
     }
 
@@ -62,12 +49,12 @@ router.post("/", async (req, res) => {
       minutes: activity?.active_minutes || 0,
       hasNFT: !!user.hasNFT,
       isPremium: !!user.is_premium,
-      isEarlyAccess: !!user.isEarlyAccess
+      isEarlyAccess: !!user.isEarlyAccess,
     });
 
   } catch (err) {
-    console.error("❌ Ошибка в /api/sync:", err);
-    return res.status(500).json({ error: "Internal server error", detail: err.message });
+    console.error("❌ JWT ошибка в /api/sync:", err.message);
+    return res.status(401).json({ error: err.message });
   }
 });
 

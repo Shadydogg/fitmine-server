@@ -1,27 +1,28 @@
+// /api/land/index.js — v2.0.0 (JWT + verifyAccessToken)
 const express = require("express");
 const router = express.Router();
-const supabase = require("../../lib/supabase"); // ✅ исправленный импорт
-const { verifyToken } = require("../../lib/jwt");
+const supabase = require("../../lib/supabase");
+const verifyAccessToken = require("../../lib/verifyAccessToken");
 
 router.get("/", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing authorization" });
+  try {
+    const user = await verifyAccessToken(req);
+    const telegram_id = user.telegram_id;
 
-  const token = authHeader.split(" ")[1];
-  const user = verifyToken(token);
-  if (!user || !user.telegram_id) return res.status(401).json({ error: "Invalid token" });
+    const { data, error } = await supabase
+      .from("land_nfts")
+      .select("*")
+      .eq("telegram_id", telegram_id);
 
-  const { data, error } = await supabase
-    .from("land_nfts")
-    .select("*")
-    .eq("telegram_id", user.telegram_id); // ✅ используем telegram_id
+    if (error) {
+      console.error("[LAND API] Ошибка загрузки земель:", error);
+      return res.status(500).json({ error: "Failed to load lands" });
+    }
 
-  if (error) {
-    console.error("[LAND API] Ошибка загрузки земель:", error);
-    return res.status(500).json({ error: "Failed to load lands" });
+    return res.json(data);
+  } catch (err) {
+    return res.status(401).json({ error: err.message });
   }
-
-  return res.json(data);
 });
 
 module.exports = router;

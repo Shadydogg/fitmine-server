@@ -1,28 +1,14 @@
-// v2.1.0 - JWT авторизация + google_connected
+// /api/profile.js — v2.2.0 (JWT авторизация через verifyAccessToken + Google Connected)
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const supabase = require('../lib/supabase');
+const verifyAccessToken = require('../lib/verifyAccessToken'); // ✅
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'fitmine_super_secret';
 
 router.get('/', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || '';
-    const [authType, token] = authHeader.split(' ');
-
-    if (authType !== 'Bearer' || !token) {
-      return res.status(401).json({ ok: false, error: 'Missing or invalid Authorization header' });
-    }
-
-    let telegram_id;
-    try {
-      const payload = jwt.verify(token, JWT_SECRET);
-      telegram_id = payload.telegram_id;
-    } catch (err) {
-      console.warn('❌ JWT валидация не пройдена:', err.message);
-      return res.status(401).json({ ok: false, error: 'Invalid or expired token' });
-    }
+    const payload = await verifyAccessToken(req); // ✅ telegram_id + jti проверены
+    const telegram_id = payload.telegram_id;
 
     // 🧩 Получаем пользователя из таблицы users
     const { data: user, error: userError } = await supabase
@@ -59,8 +45,8 @@ router.get('/', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ /api/profile INTERNAL ERROR:', error.message);
-    return res.status(500).json({ ok: false, error: 'Internal server error' });
+    console.error('❌ /api/profile JWT or Internal Error:', error.message);
+    return res.status(401).json({ ok: false, error: error.message });
   }
 });
 

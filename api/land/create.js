@@ -1,10 +1,9 @@
-// 📄 server/api/land/create.js — v1.1.0 (поддержка telegram_id и кастомных полей Supabase)
+// /api/land/create.js — v2.0.0 (JWT + verifyAccessToken)
 const express = require("express");
 const router = express.Router();
 const supabase = require("../../lib/supabase");
-const { verifyToken } = require("../../lib/jwt");
+const verifyAccessToken = require("../../lib/verifyAccessToken");
 
-// 🎯 Редкость и веса выпадения
 const rarityChances = [
   { rarity: "common", weight: 40 },
   { rarity: "rare", weight: 30 },
@@ -41,44 +40,44 @@ function getRandomRarity() {
 }
 
 router.post("/", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing authorization" });
+  try {
+    const user = await verifyAccessToken(req);
+    const telegram_id = user.telegram_id;
 
-  const token = authHeader.split(" ")[1];
-  const user = verifyToken(token);
-  if (!user?.id) return res.status(401).json({ error: "Invalid token" });
+    const rarity = getRandomRarity();
+    const attributes = rarityAttributes[rarity];
+    const bonus = parseFloat((Math.random() * (attributes.bonus[1] - attributes.bonus[0]) + attributes.bonus[0]).toFixed(3));
+    const name = req.body.name || generateName();
+    const image = `/land/${name.toLowerCase().replace(/\s+/g, "-")}.png`;
+    const description = "Новая земля, готовая к добыче энергии.";
 
-  const rarity = getRandomRarity();
-  const attributes = rarityAttributes[rarity];
-  const bonus = parseFloat((Math.random() * (attributes.bonus[1] - attributes.bonus[0]) + attributes.bonus[0]).toFixed(3));
-  const name = req.body.name || generateName();
-  const image = `/land/${name.toLowerCase().replace(/\s+/g, "-")}.png`;
-  const description = "Новая земля, готовая к добыче энергии.";
+    const { data, error } = await supabase
+      .from("land_nfts")
+      .insert([
+        {
+          telegram_id,
+          name,
+          rarity,
+          bonus_multiplier: bonus,
+          slots: attributes.slots,
+          connected_miner_ids: [],
+          image,
+          description,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select("*")
+      .single();
 
-  const { data, error } = await supabase
-    .from("land_nfts")
-    .insert([
-      {
-        telegram_id: user.id,
-        name,
-        rarity,
-        bonus_multiplier: bonus,
-        slots: attributes.slots,
-        connected_miner_ids: [],
-        image,
-        description,
-        created_at: new Date().toISOString(),
-      },
-    ])
-    .select("*")
-    .single();
+    if (error) {
+      console.error("❌ Ошибка при создании земли:", error);
+      return res.status(500).json({ error: "Failed to mint land" });
+    }
 
-  if (error) {
-    console.error("❌ Ошибка при создании земли:", error);
-    return res.status(500).json({ error: "Failed to mint land" });
+    return res.status(200).json({ ok: true, land: data });
+  } catch (err) {
+    return res.status(401).json({ error: err.message });
   }
-
-  return res.status(200).json({ ok: true, land: data });
 });
 
 module.exports = router;
