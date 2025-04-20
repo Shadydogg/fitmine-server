@@ -1,4 +1,4 @@
-// /api/sync.js — v2.2.0 (добавлена метрика distance и distanceGoal)
+// /api/sync.js — v2.3.0 (добавлена метрика distance + структурный ответ)
 const express = require("express");
 const supabase = require("../lib/supabase");
 const verifyAccessToken = require("../lib/verifyAccessToken");
@@ -12,7 +12,7 @@ router.post("/", async (req, res) => {
     const payload = await verifyAccessToken(req);
     const telegram_id = payload.telegram_id;
 
-    // Получаем профиль пользователя
+    // Получаем профиль
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("*")
@@ -20,7 +20,7 @@ router.post("/", async (req, res) => {
       .single();
 
     if (userError || !user) {
-      console.warn("⚠️ User not found in Supabase:", userError?.message);
+      console.warn("⚠️ User not found:", userError?.message);
       return res.status(404).json({ error: "User not found" });
     }
 
@@ -38,22 +38,27 @@ router.post("/", async (req, res) => {
       .single();
 
     if (activityError) {
-      console.warn("⚠️ Нет данных активности за сегодня:", activityError.message);
+      console.warn("⚠️ Нет активности:", activityError.message);
     }
 
+    // Сбор метрик с fallback
+    const steps = activity?.steps || 0;
+    const calories = activity?.calories || 0;
+    const distance = activity?.distance || 0;
+    const minutes = activity?.active_minutes || 0;
+
     return res.status(200).json({
-      steps: activity?.steps || 0,
+      steps,
       stepsGoal: 10000,
-      calories: activity?.calories || 0,
+      calories,
       caloriesGoal: 2000,
-      distance: activity?.distance || 0,
-      distanceGoal: 5,
-      minutes: activity?.active_minutes || 0,
+      distance, // в метрах
+      distanceGoal: 5, // в км
+      minutes,
       hasNFT: !!user.hasNFT,
       isPremium: !!user.is_premium,
       isEarlyAccess: !!user.isEarlyAccess,
     });
-
   } catch (err) {
     console.error("❌ JWT ошибка в /api/sync:", err.message);
     return res.status(401).json({ error: err.message });
