@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ POST /api/boosters — активировать бустер (без списания EP)
+// ✅ POST /api/boosters — активировать бустер
 router.post("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
@@ -49,11 +49,29 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Invalid booster type" });
     }
 
+    // 🔒 Проверка EP (кроме pvp_shield)
+    if (type !== "pvp_shield") {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: activity } = await supabase
+        .from("user_activity")
+        .select("ep")
+        .eq("telegram_id", telegram_id)
+        .eq("date", today)
+        .maybeSingle();
+
+      const currentEP = activity?.ep || 0;
+      if (currentEP <= 0) {
+        return res.status(400).json({
+          error: "Недостаточно активности (EP), чтобы активировать этот бустер.",
+        });
+      }
+    }
+
     const now = new Date();
     const { duration, boost } = BOOSTER_TYPES[type];
     const expiresAt = new Date(now.getTime() + duration * 60000);
 
-    // ⛔ Проверка: уже активный бустер того же типа
+    // ⛔ Проверка на уже активный бустер того же типа
     const { data: existing, error: checkError } = await supabase
       .from("boosters")
       .select("id")
@@ -74,6 +92,7 @@ router.post("/", async (req, res) => {
       });
     }
 
+    // ✅ Вставка нового бустера
     const booster = {
       id: uuidv4(),
       telegram_id,
