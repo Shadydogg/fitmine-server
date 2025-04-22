@@ -4,7 +4,7 @@ const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 const { v4: uuidv4 } = require("uuid");
 
-// 🎯 Конфигурация бустеров: тип → продолжительность (в минутах) и множитель
+// 🎯 Конфигурация бустеров
 const BOOSTER_TYPES = {
   hashrate: { duration: 60, boost: 1.5 },
   ep_boost: { duration: 45, boost: 1.2 },
@@ -12,18 +12,20 @@ const BOOSTER_TYPES = {
   pvp_shield: { duration: 120, boost: 1.0 },
 };
 
-// ✅ GET /api/boosters — получить активные бустеры
+// ✅ GET /api/boosters — получить текущие активные бустеры
 router.get("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
     const telegram_id = user.telegram_id;
-    const now = new Date().toISOString();
+
+    const nowIso = new Date().toISOString();
 
     const { data, error } = await supabase
       .from("boosters")
       .select("*")
       .eq("telegram_id", telegram_id)
-      .gte("active_at", now) // всё ещё активные
+      .lte("active_at", nowIso)
+      .gte("expires_at", nowIso)
       .order("active_at", { ascending: false });
 
     if (error) {
@@ -37,7 +39,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ POST /api/boosters — активировать новый бустер (без списания EP)
+// ✅ POST /api/boosters — активировать бустер (без списания EP)
 router.post("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
@@ -56,17 +58,18 @@ router.post("/", async (req, res) => {
       id: uuidv4(),
       telegram_id,
       type,
-      ep_cost: 0, // ✅ EP не списывается по PROMPT 9.5
+      ep_cost: 0, // по PROMPT 9.5 — EP не списывается
       duration,
       boost,
       active_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     };
 
     const { error } = await supabase.from("boosters").insert(booster);
     if (error) {
-      console.error("[Boosters API] Ошибка при активации:", error.message);
+      console.error("[Boosters API] Ошибка при активации бустера:", error.message);
       return res.status(500).json({ error: "Failed to activate booster" });
     }
 
