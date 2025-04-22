@@ -1,5 +1,3 @@
-// index.js — FitMine Server v2.6.1 (полная защита JWT + корректные методы)
-
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -28,6 +26,7 @@ const landUpdate = require('./api/land/update');
 const landCreate = require('./api/land/create');
 const epHandler = require('./api/ep');
 const epClaim = require('./api/ep/claim');
+const boosters = require('./api/boosters'); // ✅ Новый маршрут
 const bot = require('./bot/bot');
 
 // ✅ Подключение маршрутов
@@ -42,6 +41,7 @@ app.post('/api/nft/upgrade', nftUpgrade);
 app.use('/api/land', land);
 app.post('/api/land/update', landUpdate);
 app.post('/api/land/create', landCreate);
+app.use('/api/boosters', boosters); // ✅ Новый API бустеров
 
 // ✅ EP API — исправлено на GET
 app.get('/api/ep', epHandler);
@@ -76,6 +76,7 @@ app.get('/', (req, res) => {
       '/api/land',
       '/api/land/update',
       '/api/land/create',
+      '/api/boosters',
       '/api/ep',
       '/api/ep/claim',
       '/webhook'
@@ -104,6 +105,7 @@ app.listen(PORT, () => {
     '/api/land',
     '/api/land/update',
     '/api/land/create',
+    '/api/boosters',
     '/api/ep',
     '/api/ep/claim',
     '/webhook'
