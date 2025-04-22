@@ -17,7 +17,6 @@ router.get("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
     const telegram_id = user.telegram_id;
-
     const nowIso = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -39,13 +38,13 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ POST /api/boosters — активировать бустер
+// ✅ POST /api/boosters — активировать бустер (один тип за раз)
 router.post("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
     const telegram_id = user.telegram_id;
-
     const { type } = req.body;
+
     if (!BOOSTER_TYPES[type]) {
       return res.status(400).json({ error: "Invalid booster type" });
     }
@@ -54,7 +53,7 @@ router.post("/", async (req, res) => {
     const { duration, boost } = BOOSTER_TYPES[type];
     const expiresAt = new Date(now.getTime() + duration * 60000);
 
-    // ⛔ Проверка на уже активный бустер того же типа
+    // 🔒 Проверка: есть ли уже активный бустер такого типа
     const { data: existing, error: existingError } = await supabase
       .from("boosters")
       .select("id, expires_at")
@@ -63,13 +62,17 @@ router.post("/", async (req, res) => {
       .gte("expires_at", now.toISOString())
       .maybeSingle();
 
+    if (existingError) {
+      console.warn("[Boosters API] Ошибка при проверке существующего бустера:", existingError.message);
+    }
+
     if (existing) {
+      console.log(`[Boosters API] Повторная активация "${type}" отклонена, активен до ${existing.expires_at}`);
       return res.status(400).json({
         error: "Этот бустер уже активен. Подождите окончания его действия.",
       });
     }
 
-    // ✅ Создание нового бустера
     const booster = {
       id: uuidv4(),
       telegram_id,
