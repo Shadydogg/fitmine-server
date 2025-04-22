@@ -38,7 +38,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ POST /api/boosters — активировать бустер (один тип за раз)
+// ✅ POST /api/boosters — активировать бустер (без списания EP)
 router.post("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
@@ -53,21 +53,22 @@ router.post("/", async (req, res) => {
     const { duration, boost } = BOOSTER_TYPES[type];
     const expiresAt = new Date(now.getTime() + duration * 60000);
 
-    // 🔒 Проверка: есть ли уже активный бустер такого типа
-    const { data: existing, error: existingError } = await supabase
+    // ⛔ Проверка: уже активный бустер того же типа
+    const { data: existing, error: checkError } = await supabase
       .from("boosters")
-      .select("id, expires_at")
+      .select("id")
       .eq("telegram_id", telegram_id)
       .eq("type", type)
       .gte("expires_at", now.toISOString())
+      .limit(1)
       .maybeSingle();
 
-    if (existingError) {
-      console.warn("[Boosters API] Ошибка при проверке существующего бустера:", existingError.message);
+    if (checkError) {
+      console.error("[Boosters API] Ошибка при проверке активных бустеров:", checkError.message);
+      return res.status(500).json({ error: "Ошибка проверки активных бустеров" });
     }
 
     if (existing) {
-      console.log(`[Boosters API] Повторная активация "${type}" отклонена, активен до ${existing.expires_at}`);
       return res.status(400).json({
         error: "Этот бустер уже активен. Подождите окончания его действия.",
       });
@@ -86,10 +87,10 @@ router.post("/", async (req, res) => {
       updated_at: now.toISOString(),
     };
 
-    const { error } = await supabase.from("boosters").insert(booster);
-    if (error) {
-      console.error("[Boosters API] Ошибка при активации бустера:", error.message);
-      return res.status(500).json({ error: "Failed to activate booster" });
+    const { error: insertError } = await supabase.from("boosters").insert(booster);
+    if (insertError) {
+      console.error("[Boosters API] Ошибка при вставке бустера:", insertError.message);
+      return res.status(500).json({ error: "Ошибка активации бустера" });
     }
 
     return res.status(200).json({ ok: true, booster });
