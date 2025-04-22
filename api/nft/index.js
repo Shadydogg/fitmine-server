@@ -45,29 +45,27 @@ router.get("/", async (req, res) => {
       return res.status(500).json({ error: "Failed to load NFTs" });
     }
 
-    // Расчёт boostPower по новой логике
     const updated = nfts.map((nft) => {
-      const base = nft.baseHashrate || 0;
+      const base = Number(nft.base_hashrate) || 0;
       const level = nft.level || 1;
-      const land = nft.landBonus || 1.0;
+      const land = parseFloat(nft.land_bonus) || 1.0;
       const components = nft.components || [];
-      const componentBonus = components.reduce((acc, c) => acc + (c?.bonusPercent || 0), 0);
 
+      const componentBonus = components.reduce((acc, c) => acc + (c?.bonusPercent || 0), 0);
       const componentMultiplier = 1 + componentBonus / 100;
       const levelMultiplier = 1 + level * 0.1;
 
       const epMultiplier = ep > 0 ? ep / 1000 : 0;
       const premiumBase = isPremium ? 0.5 : 0;
+      const effectiveEP = ep > 0 ? epMultiplier : premiumBase;
 
-      const effectiveEP = ep > 0 ? epMultiplier : premiumBase; // 0 для обычных, 0.5 для премиум без EP
       const totalPower = base * componentMultiplier * land * levelMultiplier * effectiveEP;
 
       return {
         ...nft,
+        baseHashrate: base,
+        landBonus: land,
         miningPower: Math.round(totalPower),
-        base,
-        level,
-        land,
         componentBonus,
         isPremium,
         ep,
@@ -77,6 +75,7 @@ router.get("/", async (req, res) => {
 
     return res.json(updated);
   } catch (err) {
+    console.error("[NFT API] Ошибка авторизации:", err.message);
     return res.status(401).json({ error: err.message });
   }
 });
