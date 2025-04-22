@@ -12,7 +12,7 @@ const BOOSTER_TYPES = {
   pvp_shield: { duration: 120, boost: 1.0 },
 };
 
-// ✅ GET /api/boosters — получить текущие активные бустеры
+// ✅ GET /api/boosters — получить активные бустеры
 router.get("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
@@ -39,7 +39,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ POST /api/boosters — активировать бустер (без списания EP)
+// ✅ POST /api/boosters — активировать бустер
 router.post("/", async (req, res) => {
   try {
     const user = await verifyAccessToken(req);
@@ -54,11 +54,27 @@ router.post("/", async (req, res) => {
     const { duration, boost } = BOOSTER_TYPES[type];
     const expiresAt = new Date(now.getTime() + duration * 60000);
 
+    // ⛔ Проверка на уже активный бустер того же типа
+    const { data: existing, error: existingError } = await supabase
+      .from("boosters")
+      .select("id, expires_at")
+      .eq("telegram_id", telegram_id)
+      .eq("type", type)
+      .gte("expires_at", now.toISOString())
+      .maybeSingle();
+
+    if (existing) {
+      return res.status(400).json({
+        error: "Этот бустер уже активен. Подождите окончания его действия.",
+      });
+    }
+
+    // ✅ Создание нового бустера
     const booster = {
       id: uuidv4(),
       telegram_id,
       type,
-      ep_cost: 0, // по PROMPT 9.5 — EP не списывается
+      ep_cost: 0,
       duration,
       boost,
       active_at: now.toISOString(),
