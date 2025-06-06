@@ -1,4 +1,4 @@
-// /api/ep/index.js — v1.0.0
+// /api/ep/index.js — v1.1.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -20,13 +20,17 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
 
     if (error) {
+      console.error("❌ Ошибка загрузки EP:", error);
       return res.status(500).json({ error: "Failed to load EP", details: error.message });
     }
 
+    if (!activity) {
+      return res.status(200).json({ ep: 0, double_goal: false });
+    }
+
     return res.status(200).json({
-      ok: true,
-      ep: activity?.ep || 0,
-      double_goal: activity?.double_goal || false
+      ep: activity.ep || 0,
+      double_goal: !!activity.double_goal
     });
   } catch (err) {
     console.error("❌ /api/ep/index ERROR:", err);
