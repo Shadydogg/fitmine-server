@@ -12,7 +12,6 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
-    // 1. Получаем активность за сегодня
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -33,16 +32,14 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
     }
 
-    const epToSave = activity.ep;
-
-    // 2. Вставляем PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
         telegram_id,
-        ep_amount: epToSave,
+        ep_amount: activity.ep,
         source: "ep_daily_goal",
-        powerbank_type: "basic"
+        powerbank_type: "basic",
+        claimed_at: new Date().toISOString() // ✅ критично
       })
       .select("id")
       .maybeSingle();
@@ -52,13 +49,11 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to create PowerBank" });
     }
 
-    // 3. Обновляем user_activity: сбрасываем EP, отмечаем награду, включаем double_goal
     const { error: updateError } = await supabase
       .from("user_activity")
       .update({
         ep: 0,
         ep_reward_claimed: true,
-        double_goal: true,
         updated_at: new Date().toISOString()
       })
       .eq("telegram_id", telegram_id)
@@ -69,7 +64,6 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to update activity" });
     }
 
-    // 4. Успех
     return res.status(200).json({
       ok: true,
       rewardId: inserted.id,
@@ -77,7 +71,7 @@ module.exports = async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("❌ Ошибка в /api/ep/claim:", err);
+    console.error("❌ /api/ep/claim ERROR:", err);
     return res.status(401).json({ error: err.message || "Unauthorized" });
   }
 };
