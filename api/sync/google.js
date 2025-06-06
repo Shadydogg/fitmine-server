@@ -14,6 +14,7 @@ module.exports = async (req, res) => {
 
     let telegram_id = null;
 
+    // 🔐 Определение telegram_id
     if (type === 'Bearer') {
       try {
         const payload = jwt.verify(token, process.env.JWT_SECRET);
@@ -34,7 +35,7 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Не удалось определить telegram_id' });
     }
 
-    // Получаем текущий access_token
+    // 📥 Получение токенов из Supabase
     let { data: tokenData, error } = await supabase
       .from('google_tokens')
       .select('access_token')
@@ -47,6 +48,7 @@ module.exports = async (req, res) => {
 
     let access_token = tokenData.access_token;
 
+    // 🕐 Таймфрейм данных
     const now = Date.now();
     const startTime = new Date();
     startTime.setHours(0, 0, 0, 0);
@@ -64,7 +66,9 @@ module.exports = async (req, res) => {
     };
 
     let fitRes;
+
     try {
+      // 🔄 Первый запрос к Google
       fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
         headers: {
           Authorization: `Bearer ${access_token}`,
@@ -72,7 +76,7 @@ module.exports = async (req, res) => {
         },
       });
     } catch (error) {
-      // ⛔️ Refresh при 401 или invalid_grant
+      // ⛔️ Обработка истечения/отзыва access_token
       const isExpired = error.response?.status === 401;
       const isRevoked =
         error.response?.data?.error === 'invalid_grant' ||
@@ -87,19 +91,19 @@ module.exports = async (req, res) => {
         if (refreshError || !new_token) {
           console.error('❌ Ошибка обновления токена Google:', refreshError);
 
-          // Удаляем токены из Supabase
+          // ❌ Удаляем токен из Supabase
           await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
 
           return res.status(401).json({
             ok: false,
             error: 'Google token expired or revoked',
-            need_reauth: true,
+            need_reauth: true, // ✅ сигнал фронту
           });
         }
 
         access_token = new_token;
 
-        // Повторный запрос
+        // 🔁 Повторный запрос
         fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
           headers: {
             Authorization: `Bearer ${access_token}`,
@@ -119,7 +123,7 @@ module.exports = async (req, res) => {
       const point = dataset.point?.[0];
       if (!point) continue;
 
-      const val = point.value?.[0]?.intVal || point.value?.[0]?.fpVal || 0;
+      const val = point.value?.[0]?.intVal ?? point.value?.[0]?.fpVal ?? 0;
 
       if (dataset.dataSourceId.includes('step_count')) steps = val;
       else if (dataset.dataSourceId.includes('calories')) calories = val;
