@@ -1,6 +1,6 @@
+// /api/powerbanks/use.js — v1.2.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
-const bot = require("../../bot/bot"); // 🆕 Telegram бот
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -13,9 +13,10 @@ module.exports = async function handler(req, res) {
     const { id } = req.body;
 
     if (!id) {
-      return res.status(400).json({ error: "Missing PowerBank ID" });
+      return res.status(400).json({ error: "Missing powerbank id" });
     }
 
+    // Проверка наличия PowerBank
     const { data: powerbank, error: fetchError } = await supabase
       .from("user_powerbanks")
       .select("*")
@@ -23,11 +24,7 @@ module.exports = async function handler(req, res) {
       .eq("telegram_id", telegram_id)
       .maybeSingle();
 
-    if (fetchError) {
-      return res.status(500).json({ error: "Failed to fetch PowerBank", details: fetchError.message });
-    }
-
-    if (!powerbank) {
+    if (fetchError || !powerbank) {
       return res.status(404).json({ error: "PowerBank not found" });
     }
 
@@ -35,65 +32,42 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "PowerBank already used" });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-
-    const { data: activity, error: activityError } = await supabase
-      .from("user_activity")
-      .select("ep, double_goal")
-      .eq("telegram_id", telegram_id)
-      .eq("date", today)
-      .maybeSingle();
-
-    if (activityError) {
-      return res.status(500).json({ error: "Failed to fetch activity", details: activityError.message });
-    }
-
-    const currentEP = activity?.ep || 0;
-    const doubleGoal = activity?.double_goal || false;
-
-    if (currentEP >= 1000) {
-      return res.status(400).json({ error: "Нельзя использовать PowerBank при полной энергии (EP ≥ 1000)" });
-    }
-
-    if (doubleGoal) {
-      return res.status(400).json({ error: "Нельзя использовать PowerBank после удвоенной цели EP" });
-    }
-
+    // Обновляем PowerBank как использованный
     const { error: updateError } = await supabase
       .from("user_powerbanks")
       .update({ used: true, used_at: new Date().toISOString() })
       .eq("id", id);
 
     if (updateError) {
-      return res.status(500).json({ error: "Failed to update PowerBank", details: updateError.message });
+      return res.status(500).json({ error: "Failed to mark PowerBank as used" });
     }
 
-    const { error: epUpdateError } = await supabase
+    // 🧠 Устанавливаем double_goal = true на сегодня
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { error: goalError } = await supabase
       .from("user_activity")
-      .upsert({
-        telegram_id,
-        date: today,
-        ep: 1000,
-        ep_reward_claimed: true
-      }, { onConflict: ['telegram_id', 'date'] });
+      .upsert(
+        {
+          telegram_id,
+          date: today,
+          double_goal: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: ["telegram_id", "date"] }
+      );
 
-    if (epUpdateError) {
-      return res.status(500).json({ error: "Failed to apply PowerBank effect", details: epUpdateError.message });
+    if (goalError) {
+      console.error("❌ Ошибка при установке double_goal:", goalError);
+      return res.status(500).json({ error: "Failed to update activity goals" });
     }
-
-    // 📬 Telegram-уведомление
-    await bot.telegram.sendMessage(
-      telegram_id,
-      `⚡ Вы активировали PowerBank!\n\n🧠 Энергия восстановлена до 1000 EP и теперь можно продолжить майнинг NFT.`
-    );
 
     return res.status(200).json({
       ok: true,
-      message: "⚡ PowerBank активирован — EP восстановлено до 1000!",
-      powerbank_id: id
+      message: "✅ PowerBank применён. Цели удвоены на сегодня!",
     });
   } catch (err) {
     console.error("❌ /api/powerbanks/use ERROR:", err);
-    return res.status(401).json({ error: err.message || "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized", message: err.message });
   }
 };
