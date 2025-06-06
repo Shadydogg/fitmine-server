@@ -1,4 +1,3 @@
-// index.js — FitMine Server v2.6.3
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -29,13 +28,12 @@ const boosters = require('./api/boosters');
 const bot = require('./bot/bot');
 
 // ✅ EP API
-const epIndex = require('./api/ep/index');     // 🔄 GET /api/ep (с double_goal)
-const epClaim = require('./api/ep/claim');     // 🎁 POST /api/ep/claim
+const epIndex = require('./api/ep/index');
+const epClaim = require('./api/ep/claim');
 
 // ✅ PowerBank API
-const powerbanksIndex = require('./api/powerbanks/index'); // GET /api/powerbanks
-const powerbanksUse = require('./api/powerbanks/use');     // POST /api/powerbanks/use
-const powerbanksStats = require('./api/powerbanks/stats'); // GET /api/powerbanks/stats
+const powerbankUse = require('./api/powerbanks/use');
+const powerbankStats = require('./api/powerbanks/stats');
 
 // ✅ Подключение маршрутов
 app.use('/api/verifyTelegram', verifyTelegram);
@@ -56,9 +54,8 @@ app.get('/api/ep', epIndex);
 app.post('/api/ep/claim', epClaim);
 
 // ✅ PowerBank маршруты
-app.get('/api/powerbanks', powerbanksIndex);
-app.post('/api/powerbanks/use', powerbanksUse);
-app.get('/api/powerbanks/stats', powerbanksStats);
+app.post('/api/powerbanks/use', powerbankUse);
+app.get('/api/powerbanks/stats', powerbankStats);
 
 // ✅ Webhook от Telegram Bot API
 app.post('/webhook', express.json(), (req, res) => {
@@ -92,7 +89,6 @@ app.get('/', (req, res) => {
       '/api/boosters',
       '/api/ep',
       '/api/ep/claim',
-      '/api/powerbanks',
       '/api/powerbanks/use',
       '/api/powerbanks/stats',
       '/webhook'
@@ -124,7 +120,6 @@ app.listen(PORT, () => {
     '/api/boosters',
     '/api/ep',
     '/api/ep/claim',
-    '/api/powerbanks',
     '/api/powerbanks/use',
     '/api/powerbanks/stats',
     '/webhook'
