@@ -1,3 +1,4 @@
+// index.js — FitMine Server v2.6.3
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -24,10 +25,17 @@ const nftUpgrade = require('./api/nft/upgrade');
 const land = require('./api/land');
 const landUpdate = require('./api/land/update');
 const landCreate = require('./api/land/create');
-const epHandler = require('./api/ep');
-const epClaim = require('./api/ep/claim');
-const boosters = require('./api/boosters'); // ✅ Новый маршрут
+const boosters = require('./api/boosters');
 const bot = require('./bot/bot');
+
+// ✅ EP API
+const epIndex = require('./api/ep/index');     // 🔄 GET /api/ep (с double_goal)
+const epClaim = require('./api/ep/claim');     // 🎁 POST /api/ep/claim
+
+// ✅ PowerBank API
+const powerbanksIndex = require('./api/powerbanks/index'); // GET /api/powerbanks
+const powerbanksUse = require('./api/powerbanks/use');     // POST /api/powerbanks/use
+const powerbanksStats = require('./api/powerbanks/stats'); // GET /api/powerbanks/stats
 
 // ✅ Подключение маршрутов
 app.use('/api/verifyTelegram', verifyTelegram);
@@ -41,11 +49,16 @@ app.post('/api/nft/upgrade', nftUpgrade);
 app.use('/api/land', land);
 app.post('/api/land/update', landUpdate);
 app.post('/api/land/create', landCreate);
-app.use('/api/boosters', boosters); // ✅ Новый API бустеров
+app.use('/api/boosters', boosters);
 
-// ✅ EP API — исправлено на GET
-app.get('/api/ep', epHandler);
+// ✅ EP маршруты
+app.get('/api/ep', epIndex);
 app.post('/api/ep/claim', epClaim);
+
+// ✅ PowerBank маршруты
+app.get('/api/powerbanks', powerbanksIndex);
+app.post('/api/powerbanks/use', powerbanksUse);
+app.get('/api/powerbanks/stats', powerbanksStats);
 
 // ✅ Webhook от Telegram Bot API
 app.post('/webhook', express.json(), (req, res) => {
@@ -62,7 +75,7 @@ app.post('/webhook', express.json(), (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     ok: true,
-    version: 'FitMine Server v2.6.1',
+    version: 'FitMine Server v2.6.3',
     supabase: `Supabase SDK v${supabaseVersion}`,
     api: [
       '/api/verifyTelegram',
@@ -79,6 +92,9 @@ app.get('/', (req, res) => {
       '/api/boosters',
       '/api/ep',
       '/api/ep/claim',
+      '/api/powerbanks',
+      '/api/powerbanks/use',
+      '/api/powerbanks/stats',
       '/webhook'
     ],
     message: 'Telegram Webhook активен ✅, Supabase подключён 🚀'
@@ -88,7 +104,7 @@ app.get('/', (req, res) => {
 // ✅ Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 FitMine Server v2.6.1 запущен на порту ${PORT}`);
+  console.log(`🚀 FitMine Server v2.6.3 запущен на порту ${PORT}`);
   console.log(`🧩 Supabase SDK: v${supabaseVersion}`);
   console.log(`✅ Telegram Webhook готов к приёму`);
 
@@ -108,6 +124,9 @@ app.listen(PORT, () => {
     '/api/boosters',
     '/api/ep',
     '/api/ep/claim',
+    '/api/powerbanks',
+    '/api/powerbanks/use',
+    '/api/powerbanks/stats',
     '/webhook'
   ].forEach(route => console.log(`🔹 ${route}`));
 });
