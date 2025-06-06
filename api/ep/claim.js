@@ -1,4 +1,3 @@
-// /api/ep/claim.js — v2.5.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -32,6 +31,7 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
     }
 
+    // ✅ Явно передаём used: false
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -39,7 +39,8 @@ module.exports = async function handler(req, res) {
         ep_amount: activity.ep,
         source: "ep_daily_goal",
         powerbank_type: "basic",
-        claimed_at: new Date().toISOString() // ✅ критично
+        claimed_at: new Date().toISOString(),
+        used: false // 🛠️ Критично: логический тип
       })
       .select("id")
       .maybeSingle();
