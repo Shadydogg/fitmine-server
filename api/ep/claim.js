@@ -1,3 +1,4 @@
+// /api/ep/claim.js — v2.5.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -11,7 +12,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
-    // Получаем активность за сегодня
+    // 1. Получаем активность за сегодня
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -32,12 +33,14 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
     }
 
-    // Вставляем PowerBank
+    const epToSave = activity.ep;
+
+    // 2. Вставляем PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
         telegram_id,
-        ep_amount: activity.ep,
+        ep_amount: epToSave,
         source: "ep_daily_goal",
         powerbank_type: "basic"
       })
@@ -49,12 +52,13 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to create PowerBank" });
     }
 
-    // Обнуляем EP и помечаем как полученное
+    // 3. Обновляем user_activity: сбрасываем EP, отмечаем награду, включаем double_goal
     const { error: updateError } = await supabase
       .from("user_activity")
       .update({
         ep: 0,
         ep_reward_claimed: true,
+        double_goal: true,
         updated_at: new Date().toISOString()
       })
       .eq("telegram_id", telegram_id)
@@ -65,7 +69,7 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to update activity" });
     }
 
-    // Успешный ответ
+    // 4. Успех
     return res.status(200).json({
       ok: true,
       rewardId: inserted.id,
