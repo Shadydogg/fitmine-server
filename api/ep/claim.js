@@ -1,4 +1,4 @@
-// /api/ep/claim.js — v2.3.1
+// /api/ep/claim.js — v2.4.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -12,6 +12,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
+    // Получаем текущую активность
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -20,6 +21,7 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
 
     if (fetchError) {
+      console.error("❌ fetchError:", fetchError);
       return res.status(500).json({ error: "Failed to fetch activity", details: fetchError.message });
     }
 
@@ -28,10 +30,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (activity.ep_reward_claimed) {
-      return res.status(400).json({ error: "Reward already claimed" });
+      return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
     }
 
-    // Сохраняем PowerBank в инвентарь
+    // Вставляем PowerBank в инвентарь
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -41,32 +43,36 @@ module.exports = async function handler(req, res) {
         powerbank_type: "basic"
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
-    if (insertError) {
-      return res.status(500).json({ error: "Failed to create PowerBank", details: insertError.message });
+    if (insertError || !inserted?.id) {
+      console.error("❌ insertError:", insertError);
+      return res.status(500).json({ error: "Failed to create PowerBank", details: insertError?.message });
     }
 
-    // Обновляем статус и сбрасываем EP
+    // Обнуляем EP и отмечаем, что награда получена
     const { error: updateError } = await supabase
       .from("user_activity")
       .update({
+        ep: 0,
         ep_reward_claimed: true,
-        ep: 0
+        updated_at: new Date().toISOString()
       })
       .eq("telegram_id", telegram_id)
       .eq("date", today);
 
     if (updateError) {
-      return res.status(500).json({ error: "Failed to update reward status", details: updateError.message });
+      console.error("❌ updateError:", updateError);
+      return res.status(500).json({ error: "Failed to update activity", details: updateError.message });
     }
 
-    // Возвращаем rewardId для модального окна
+    // Успех
     return res.status(200).json({
       ok: true,
       rewardId: inserted.id,
       rewardType: "powerbank_basic"
     });
+
   } catch (err) {
     console.error("❌ /api/ep/claim ERROR:", err);
     return res.status(401).json({ error: err.message || "Unauthorized" });
