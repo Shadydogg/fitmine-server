@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { validate, parse } = require('@telegram-apps/init-data-node');
 const storeGoogleToken = require('../../lib/storeGoogleToken');
+const supabase = require('../../lib/supabase');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -21,7 +22,8 @@ module.exports = async (req, res) => {
     // ✅ Проверяем подпись Telegram
     validate(initDataRaw, process.env.BOT_TOKEN);
     const parsed = parse(initDataRaw);
-    const telegram_id = parsed?.user?.id;
+    const user = parsed?.user;
+    const telegram_id = user?.id;
 
     if (!telegram_id) {
       console.warn('⚠️ Ошибка извлечения telegram_id:', parsed);
@@ -54,8 +56,8 @@ module.exports = async (req, res) => {
 
     console.log('✅ [Google] Токены получены');
 
-    // 💾 Сохраняем в Supabase
-    const { error } = await storeGoogleToken(telegram_id, {
+    // 💾 Сохраняем токены в Supabase
+    const { error: tokenSaveError } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
       scope,
@@ -63,12 +65,22 @@ module.exports = async (req, res) => {
       expires_in,
     });
 
-    if (error) {
-      console.error('❌ [Supabase] Ошибка сохранения токенов:', error);
+    if (tokenSaveError) {
+      console.error('❌ [Supabase] Ошибка сохранения токенов:', tokenSaveError);
       return res.status(500).json({ ok: false, error: 'Supabase token insert error' });
     }
 
-    console.log('💾 [Supabase] Токены успешно сохранены');
+    // 🔁 Обновляем users.google_connected = true
+    const { error: userUpdateError } = await supabase
+      .from('users')
+      .update({ google_connected: true, updated_at: new Date().toISOString() })
+      .eq('telegram_id', telegram_id);
+
+    if (userUpdateError) {
+      console.error('❌ [Supabase] Ошибка обновления пользователя:', userUpdateError);
+    }
+
+    console.log('💾 [Supabase] Токены и статус подключения успешно сохранены');
 
     // ✅ HTML-ответ
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
