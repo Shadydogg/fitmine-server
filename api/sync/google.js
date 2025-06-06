@@ -3,7 +3,7 @@ const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
 const jwt = require('jsonwebtoken');
 const storeUserActivity = require('../../lib/storeUserActivity');
-const refreshGoogleToken = require('../../lib/refreshGoogleToken'); // ✅ новое подключение
+const refreshGoogleToken = require('../../lib/refreshGoogleToken');
 
 const GOOGLE_DATA_SOURCE = 'https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate';
 
@@ -63,7 +63,6 @@ module.exports = async (req, res) => {
       endTimeMillis: now
     };
 
-    // 🔁 Запрос к Google Fit API (с автоматическим обновлением токена при 401)
     let fitRes;
     try {
       fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
@@ -73,11 +72,29 @@ module.exports = async (req, res) => {
         },
       });
     } catch (error) {
-      if (error.response?.status === 401) {
-        console.warn('⚠️ Access token просрочен, пробуем обновить...');
+      // ⛔️ Refresh при 401 или invalid_grant
+      const isExpired = error.response?.status === 401;
+      const isRevoked =
+        error.response?.data?.error === 'invalid_grant' ||
+        error.response?.data?.error_description?.includes('expired') ||
+        error.response?.data?.error_description?.includes('revoked');
+
+      if (isExpired || isRevoked) {
+        console.warn('⚠️ Access token просрочен или отозван, пробуем обновить...');
+
         const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
+
         if (refreshError || !new_token) {
-          return res.status(401).json({ ok: false, error: 'Google token refresh failed' });
+          console.error('❌ Ошибка обновления токена Google:', refreshError);
+
+          // Удаляем токены из Supabase
+          await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
+
+          return res.status(401).json({
+            ok: false,
+            error: 'Google token expired or revoked',
+            need_reauth: true,
+          });
         }
 
         access_token = new_token;
