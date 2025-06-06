@@ -11,6 +11,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
+    // 📥 Получаем запись активности
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -31,7 +32,7 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
     }
 
-    // ✅ Явно передаём used: false
+    // 🎁 Вставка PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -40,7 +41,7 @@ module.exports = async function handler(req, res) {
         source: "ep_daily_goal",
         powerbank_type: "basic",
         claimed_at: new Date().toISOString(),
-        used: false // 🛠️ Критично: логический тип
+        used: false
       })
       .select("id")
       .maybeSingle();
@@ -50,15 +51,19 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to create PowerBank" });
     }
 
+    // 🔁 Обновляем user_activity: обнуляем EP, отмечаем как получено, активируем double_goal
     const { error: updateError } = await supabase
       .from("user_activity")
-      .update({
+      .upsert({
+        telegram_id,
+        date: today,
         ep: 0,
         ep_reward_claimed: true,
+        double_goal: true,
         updated_at: new Date().toISOString()
-      })
-      .eq("telegram_id", telegram_id)
-      .eq("date", today);
+      }, {
+        onConflict: ['telegram_id', 'date']
+      });
 
     if (updateError) {
       console.error("❌ Ошибка обновления активности:", updateError);
