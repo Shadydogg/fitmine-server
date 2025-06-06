@@ -1,4 +1,4 @@
-// /api/ep/claim.js — v2.3.0
+// /api/ep/claim.js — v2.3.1
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -32,14 +32,16 @@ module.exports = async function handler(req, res) {
     }
 
     // Сохраняем PowerBank в инвентарь
-    const { error: insertError } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
         telegram_id,
         ep_amount: activity.ep,
         source: "ep_daily_goal",
         powerbank_type: "basic"
-      });
+      })
+      .select("id")
+      .single();
 
     if (insertError) {
       return res.status(500).json({ error: "Failed to create PowerBank", details: insertError.message });
@@ -59,10 +61,11 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to update reward status", details: updateError.message });
     }
 
+    // Возвращаем rewardId для модального окна
     return res.status(200).json({
       ok: true,
-      message: "🎁 PowerBank получен!",
-      reward: "powerbank_basic"
+      rewardId: inserted.id,
+      rewardType: "powerbank_basic"
     });
   } catch (err) {
     console.error("❌ /api/ep/claim ERROR:", err);
