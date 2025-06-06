@@ -15,10 +15,10 @@ const { version: supabaseVersion } = require('@supabase/supabase-js/package.json
 // ✅ Импорт маршрутов
 const verifyTelegram = require('./api/verifyTelegram');
 const profile = require('./api/profile');
-const sync = require('./api/sync');
 const refresh = require('./api/refresh');
 const oauthCallback = require('./api/oauth/callback');
 const syncGoogle = require('./api/sync/google');
+const syncIndex = require('./api/sync/index'); // ✅ добавлено
 const nft = require('./api/nft');
 const nftUpgrade = require('./api/nft/upgrade');
 const land = require('./api/land');
@@ -38,10 +38,10 @@ const powerbankStats = require('./api/powerbanks/stats');
 // ✅ Подключение маршрутов
 app.use('/api/verifyTelegram', verifyTelegram);
 app.use('/api/profile', profile);
-app.use('/api/sync', sync);
 app.use('/api/refresh', refresh);
 app.get('/api/oauth/callback', oauthCallback);
 app.post('/api/sync/google', syncGoogle);
+app.post('/api/sync', syncIndex); // ✅ подключён /api/sync/index.js как POST
 app.use('/api/nft', nft);
 app.post('/api/nft/upgrade', nftUpgrade);
 app.use('/api/land', land);
@@ -72,15 +72,15 @@ app.post('/webhook', express.json(), (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     ok: true,
-    version: 'FitMine Server v2.6.3',
+    version: 'FitMine Server v2.6.4',
     supabase: `Supabase SDK v${supabaseVersion}`,
     api: [
       '/api/verifyTelegram',
       '/api/profile',
-      '/api/sync',
       '/api/refresh',
       '/api/oauth/callback',
       '/api/sync/google',
+      '/api/sync',
       '/api/nft',
       '/api/nft/upgrade',
       '/api/land',
@@ -100,7 +100,7 @@ app.get('/', (req, res) => {
 // ✅ Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 FitMine Server v2.6.3 запущен на порту ${PORT}`);
+  console.log(`🚀 FitMine Server v2.6.4 запущен на порту ${PORT}`);
   console.log(`🧩 Supabase SDK: v${supabaseVersion}`);
   console.log(`✅ Telegram Webhook готов к приёму`);
 
@@ -108,10 +108,10 @@ app.listen(PORT, () => {
   [
     '/api/verifyTelegram',
     '/api/profile',
-    '/api/sync',
     '/api/refresh',
     '/api/oauth/callback',
     '/api/sync/google',
+    '/api/sync',
     '/api/nft',
     '/api/nft/upgrade',
     '/api/land',
