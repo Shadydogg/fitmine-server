@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
-    // 📥 Получаем запись активности
+    // 📥 Получаем user_activity на сегодня
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -21,18 +21,26 @@ module.exports = async function handler(req, res) {
 
     if (fetchError) {
       console.error("❌ Ошибка получения активности:", fetchError);
-      return res.status(500).json({ error: "Failed to fetch activity" });
+      return res.status(500).json({ error: "Ошибка получения активности" });
     }
 
-    if (!activity || activity.ep < 1000) {
-      return res.status(400).json({ error: "EP goal not reached yet" });
+    if (!activity) {
+      return res.status(404).json({ error: "Активность за сегодня не найдена" });
     }
 
+    const goal = activity.double_goal ? 2000 : 1000;
+
+    // ❌ Цель не достигнута
+    if (activity.ep < goal) {
+      return res.status(400).json({ error: `Цель не достигнута (${activity.ep}/${goal})` });
+    }
+
+    // ❌ Уже получен PowerBank
     if (activity.ep_reward_claimed) {
-      return res.status(400).json({ error: "Reward already claimed", alreadyClaimed: true });
+      return res.status(400).json({ error: "Сегодня уже получен PowerBank", alreadyClaimed: true });
     }
 
-    // 🎁 Вставка PowerBank
+    // 🎁 Вставляем PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -48,10 +56,10 @@ module.exports = async function handler(req, res) {
 
     if (insertError || !inserted?.id) {
       console.error("❌ Ошибка вставки PowerBank:", insertError);
-      return res.status(500).json({ error: "Failed to create PowerBank" });
+      return res.status(500).json({ error: "Ошибка при создании PowerBank" });
     }
 
-    // 🔁 Обновляем user_activity: обнуляем EP, отмечаем как получено, активируем double_goal
+    // 🔁 Обновляем user_activity
     const { error: updateError } = await supabase
       .from("user_activity")
       .upsert({
@@ -67,13 +75,14 @@ module.exports = async function handler(req, res) {
 
     if (updateError) {
       console.error("❌ Ошибка обновления активности:", updateError);
-      return res.status(500).json({ error: "Failed to update activity" });
+      return res.status(500).json({ error: "Ошибка обновления активности" });
     }
 
     return res.status(200).json({
       ok: true,
       rewardId: inserted.id,
-      rewardType: "powerbank_basic"
+      rewardType: "powerbank_basic",
+      message: "🎉 Цель достигнута. PowerBank выдан!",
     });
 
   } catch (err) {
