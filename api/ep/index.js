@@ -1,4 +1,4 @@
-// /api/ep/index.js — v1.1.0
+// /api/ep/index.js — v2.0.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
 
     const { data: activity, error } = await supabase
       .from("user_activity")
-      .select("ep, double_goal")
+      .select("ep, double_goal, ep_reward_claimed")
       .eq("telegram_id", telegram_id)
       .eq("date", today)
       .maybeSingle();
@@ -24,13 +24,10 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to load EP", details: error.message });
     }
 
-    if (!activity) {
-      return res.status(200).json({ ep: 0, double_goal: false });
-    }
-
     return res.status(200).json({
-      ep: activity.ep || 0,
-      double_goal: !!activity.double_goal
+      ep: activity?.ep || 0,
+      double_goal: !!activity?.double_goal,
+      ep_reward_claimed: !!activity?.ep_reward_claimed,
     });
   } catch (err) {
     console.error("❌ /api/ep/index ERROR:", err);
