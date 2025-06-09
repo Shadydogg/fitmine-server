@@ -1,3 +1,4 @@
+// /api/sync/google.js — v3.0.0
 const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
@@ -68,7 +69,6 @@ module.exports = async (req, res) => {
     let fitRes;
 
     try {
-      // 🔄 Первый запрос к Google
       fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
         headers: {
           Authorization: `Bearer ${access_token}`,
@@ -76,7 +76,6 @@ module.exports = async (req, res) => {
         },
       });
     } catch (error) {
-      // ⛔️ Обработка истечения/отзыва access_token
       const isExpired = error.response?.status === 401;
       const isRevoked =
         error.response?.data?.error === 'invalid_grant' ||
@@ -90,20 +89,16 @@ module.exports = async (req, res) => {
 
         if (refreshError || !new_token) {
           console.error('❌ Ошибка обновления токена Google:', refreshError);
-
-          // ❌ Удаляем токен из Supabase
           await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
-
           return res.status(401).json({
             ok: false,
             error: 'Google token expired or revoked',
-            need_reauth: true, // ✅ сигнал фронту
+            need_reauth: true,
           });
         }
 
         access_token = new_token;
 
-        // 🔁 Повторный запрос
         fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
           headers: {
             Authorization: `Bearer ${access_token}`,
@@ -131,20 +126,34 @@ module.exports = async (req, res) => {
       else if (dataset.dataSourceId.includes('distance')) distance = val;
     }
 
-    console.log('📥 Сохраняем данные активности:', {
-      telegram_id,
-      steps,
-      calories,
-      active_minutes: minutes,
-      distance
-    });
+    // 🧠 Получаем текущий user_activity (для проверки double_goal)
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: currentActivity, error: fetchError } = await supabase
+      .from('user_activity')
+      .select('ep, double_goal')
+      .eq('telegram_id', telegram_id)
+      .eq('date', today)
+      .maybeSingle();
 
+    if (fetchError) {
+      console.error("❌ Ошибка загрузки текущей активности:", fetchError);
+    }
+
+    let allowEPOverwrite = true;
+
+    if (currentActivity?.double_goal) {
+      console.log("🛡️ PowerBank активен сегодня — EP не перезаписываем");
+      allowEPOverwrite = false;
+    }
+
+    // 💾 Сохраняем активность
     const { error: saveError } = await storeUserActivity(telegram_id, {
       steps,
       calories,
       active_minutes: minutes,
       distance,
-      source: 'google_fit'
+      source: 'google_fit',
+      allowEPOverwrite, // ✅ Новое поле
     });
 
     if (saveError) {
@@ -157,7 +166,7 @@ module.exports = async (req, res) => {
       calories,
       minutes,
       distance,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
     });
 
   } catch (err) {
