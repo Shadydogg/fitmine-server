@@ -1,3 +1,4 @@
+// /api/ep/claim.js — v3.0.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -11,7 +12,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
-    // 📥 Получаем user_activity на сегодня
+    // 1. Получаем сегодняшнюю активность
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("*")
@@ -19,28 +20,39 @@ module.exports = async function handler(req, res) {
       .eq("date", today)
       .maybeSingle();
 
-    if (fetchError) {
-      console.error("❌ Ошибка получения активности:", fetchError);
+    if (fetchError || !activity) {
       return res.status(500).json({ error: "Ошибка получения активности" });
     }
 
-    if (!activity) {
-      return res.status(404).json({ error: "Активность за сегодня не найдена" });
-    }
-
-    const goal = activity.double_goal ? 2000 : 1000;
-
-    // ❌ Цель не достигнута
-    if (activity.ep < goal) {
-      return res.status(400).json({ error: `Цель не достигнута (${activity.ep}/${goal})` });
-    }
-
-    // ❌ Уже получен PowerBank
+    // 2. Проверка: PowerBank уже получен
     if (activity.ep_reward_claimed) {
-      return res.status(400).json({ error: "Сегодня уже получен PowerBank", alreadyClaimed: true });
+      return res.status(200).json({
+        ok: false,
+        alreadyClaimed: true,
+        message: "⚡ PowerBank уже получен сегодня",
+      });
     }
 
-    // 🎁 Вставляем PowerBank
+    // 3. Проверка: цели уже удвоены — нельзя получить PowerBank
+    if (activity.double_goal) {
+      return res.status(200).json({
+        ok: false,
+        doubleGoalActive: true,
+        message: "⚠️ Нельзя получить PowerBank после активации double goal",
+      });
+    }
+
+    // 4. Проверка: не достигнута цель (1000 EP)
+    if (activity.ep < 1000) {
+      return res.status(200).json({
+        ok: false,
+        goalNotReached: true,
+        currentEP: activity.ep,
+        message: `🎯 Недостаточно EP (${activity.ep}/1000) для PowerBank`,
+      });
+    }
+
+    // 5. Вставляем PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -49,7 +61,7 @@ module.exports = async function handler(req, res) {
         source: "ep_daily_goal",
         powerbank_type: "basic",
         claimed_at: new Date().toISOString(),
-        used: false
+        used: false,
       })
       .select("id")
       .maybeSingle();
@@ -59,7 +71,7 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка при создании PowerBank" });
     }
 
-    // 🔁 Обновляем user_activity
+    // 6. Обновляем user_activity: сбрасываем EP, ставим double_goal
     const { error: updateError } = await supabase
       .from("user_activity")
       .upsert({
@@ -68,25 +80,26 @@ module.exports = async function handler(req, res) {
         ep: 0,
         ep_reward_claimed: true,
         double_goal: true,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       }, {
         onConflict: ['telegram_id', 'date']
       });
 
     if (updateError) {
-      console.error("❌ Ошибка обновления активности:", updateError);
       return res.status(500).json({ error: "Ошибка обновления активности" });
     }
 
+    // 7. Ответ
     return res.status(200).json({
       ok: true,
+      powerbankCreated: true,
       rewardId: inserted.id,
       rewardType: "powerbank_basic",
-      message: "🎉 Цель достигнута. PowerBank выдан!",
+      message: "🎉 PowerBank успешно получен!",
     });
 
   } catch (err) {
     console.error("❌ /api/ep/claim ERROR:", err);
-    return res.status(401).json({ error: err.message || "Unauthorized" });
+    return res.status(401).json({ error: "Unauthorized", message: err.message });
   }
 };
