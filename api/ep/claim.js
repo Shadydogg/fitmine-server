@@ -11,7 +11,6 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
-    // 1. Получаем активность за сегодня
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("ep, ep_reward_claimed, double_goal")
@@ -30,7 +29,6 @@ module.exports = async function handler(req, res) {
 
     const { ep, ep_reward_claimed, double_goal } = activity;
 
-    // 2. Уже получен PowerBank
     if (ep_reward_claimed) {
       return res.status(200).json({
         ok: false,
@@ -39,7 +37,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 3. PowerBank уже применён (цели удвоены)
     if (double_goal) {
       return res.status(200).json({
         ok: false,
@@ -48,7 +45,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 4. Недостаточно EP
     if (ep < 1000) {
       return res.status(200).json({
         ok: false,
@@ -58,7 +54,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 5. Вставка PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -77,7 +72,6 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка создания PowerBank" });
     }
 
-    // 6. Обновление активности
     const { error: updateError } = await supabase
       .from("user_activity")
       .upsert({
@@ -96,12 +90,14 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка обновления активности" });
     }
 
-    // 7. Успех
+    console.log(`✅ PowerBank выдан: ${inserted.id} | EP = ${ep} | double_goal = true`);
+
     return res.status(200).json({
       ok: true,
       rewardId: inserted.id,
       rewardType: "powerbank_basic",
       powerbankCreated: true,
+      doubleGoal: true,
       message: "🎉 Цель достигнута. PowerBank выдан и цели удвоены!",
     });
 
