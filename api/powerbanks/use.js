@@ -1,4 +1,3 @@
-// /api/powerbanks/use.js — v1.3.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -32,22 +31,12 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "PowerBank already used" });
     }
 
-    // ✅ Отмечаем PowerBank как использованный
-    const { error: updatePBError } = await supabase
-      .from("user_powerbanks")
-      .update({ used: true, used_at: new Date().toISOString() })
-      .eq("id", id);
-
-    if (updatePBError) {
-      return res.status(500).json({ error: "Failed to mark PowerBank as used" });
-    }
-
     const today = new Date().toISOString().slice(0, 10);
 
-    // Получаем текущую активность
+    // Проверяем текущую активность
     const { data: activity, error: activityFetchError } = await supabase
       .from("user_activity")
-      .select("*")
+      .select("ep, double_goal")
       .eq("telegram_id", telegram_id)
       .eq("date", today)
       .maybeSingle();
@@ -57,10 +46,13 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to fetch activity" });
     }
 
-    const currentEP = activity?.ep || 0;
-    const newEP = currentEP < 1000 ? 1000 : currentEP;
+    if (activity?.double_goal) {
+      return res.status(400).json({ error: "PowerBank уже активен сегодня (double_goal = true)" });
+    }
 
-    // 🧠 Устанавливаем double_goal = true и повышаем EP
+    const currentEP = activity?.ep || 0;
+
+    // 🧠 Обновляем user_activity (double_goal = true), EP не трогаем
     const { error: updateActivityError } = await supabase
       .from("user_activity")
       .upsert(
@@ -68,7 +60,7 @@ module.exports = async function handler(req, res) {
           telegram_id,
           date: today,
           double_goal: true,
-          ep: newEP,
+          ep: currentEP,
           updated_at: new Date().toISOString(),
         },
         { onConflict: ["telegram_id", "date"] }
@@ -79,10 +71,20 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Failed to update activity" });
     }
 
+    // ✅ Помечаем PowerBank как использованный
+    const { error: updatePBError } = await supabase
+      .from("user_powerbanks")
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (updatePBError) {
+      return res.status(500).json({ error: "Failed to mark PowerBank as used" });
+    }
+
     return res.status(200).json({
       ok: true,
-      message: `✅ PowerBank активирован: EP = ${newEP}, цели удвоены`,
-      ep: newEP,
+      message: `✅ PowerBank активирован. Цели удвоены.`,
+      ep: currentEP,
       double_goal: true,
     });
 
