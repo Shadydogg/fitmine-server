@@ -40,6 +40,10 @@ router.post("/", async (req, res) => {
       console.warn("⚠️ Нет данных активности:", activityError.message);
     }
 
+    // 🔁 Учитываем double_goal
+    const doubleGoal = activity?.double_goal || false;
+    const multiplier = doubleGoal ? 2 : 1;
+
     // Метрики активности (с fallback)
     const steps = activity?.steps ?? 0;
     const calories = activity?.calories ?? 0;
@@ -54,12 +58,14 @@ router.post("/", async (req, res) => {
     return res.status(200).json({
       ok: true,
       steps,
-      stepsGoal: 10000,
+      stepsGoal: 10000 * multiplier,
       calories,
-      caloriesGoal: 2000,
-      distance, // в метрах
-      distanceGoal: 5, // в км
+      caloriesGoal: 2000 * multiplier,
+      distance,
+      distanceGoal: 5 * multiplier,
       minutes,
+      minutesGoal: 45 * multiplier,
+      double_goal: doubleGoal,
       hasNFT,
       isPremium,
       isEarlyAccess,
