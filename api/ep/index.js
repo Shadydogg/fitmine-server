@@ -1,4 +1,4 @@
-// /api/ep/index.js — v2.1.0
+// /api/ep/index.js — v2.2.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ep: activity?.ep || 0,
       double_goal: !!activity?.double_goal,
-      ep_reward_claimed: !!activity?.ep_reward_claimed
+      ep_reward_claimed: !!activity?.ep_reward_claimed,
     });
   } catch (err) {
     console.error("❌ /api/ep/index ERROR:", err);
