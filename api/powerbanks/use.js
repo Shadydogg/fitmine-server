@@ -1,3 +1,4 @@
+// /api/powerbanks/use.js — v3.2.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -31,7 +32,43 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "PowerBank already used" });
     }
 
-    // ✅ Просто помечаем PowerBank как использованный
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Получаем текущую активность
+    const { data: activity, error: activityFetchError } = await supabase
+      .from("user_activity")
+      .select("ep")
+      .eq("telegram_id", telegram_id)
+      .eq("date", today)
+      .maybeSingle();
+
+    if (activityFetchError) {
+      console.error("❌ Ошибка получения активности:", activityFetchError);
+      return res.status(500).json({ error: "Failed to fetch activity" });
+    }
+
+    const currentEP = activity?.ep || 0;
+    const newEP = Math.max(currentEP, 1000);
+
+    // Обновляем EP, НЕ трогаем double_goal
+    const { error: updateActivityError } = await supabase
+      .from("user_activity")
+      .upsert(
+        {
+          telegram_id,
+          date: today,
+          ep: newEP,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: ["telegram_id", "date"] }
+      );
+
+    if (updateActivityError) {
+      console.error("❌ Ошибка обновления активности:", updateActivityError);
+      return res.status(500).json({ error: "Failed to update EP" });
+    }
+
+    // Помечаем PowerBank как использованный
     const { error: updatePBError } = await supabase
       .from("user_powerbanks")
       .update({ used: true, used_at: new Date().toISOString() })
@@ -43,7 +80,8 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      message: `✅ PowerBank активирован. Можно продолжать.`,
+      message: `✅ PowerBank использован. Выдано 1000 EP.`,
+      ep: newEP,
     });
 
   } catch (err) {
