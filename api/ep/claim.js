@@ -11,6 +11,7 @@ module.exports = async function handler(req, res) {
     const telegram_id = user.telegram_id;
     const today = new Date().toISOString().slice(0, 10);
 
+    // 1. Получаем активность за сегодня
     const { data: activity, error: fetchError } = await supabase
       .from("user_activity")
       .select("ep, ep_reward_claimed, double_goal")
@@ -29,6 +30,32 @@ module.exports = async function handler(req, res) {
 
     const { ep, ep_reward_claimed, double_goal } = activity;
 
+    // 2. Проверка: PowerBank уже использован сегодня
+    const { data: usedTodayPBs, error: pbError } = await supabase
+      .from("user_powerbanks")
+      .select("used, used_at")
+      .eq("telegram_id", telegram_id)
+      .eq("used", true);
+
+    if (pbError) {
+      console.error("❌ Ошибка проверки PowerBank:", pbError);
+      return res.status(500).json({ error: "Ошибка проверки PowerBank" });
+    }
+
+    const usedToday = (usedTodayPBs || []).some(pb => {
+      const usedAt = pb.used_at ? new Date(pb.used_at).toISOString().slice(0, 10) : null;
+      return usedAt === today;
+    });
+
+    if (usedToday) {
+      return res.status(200).json({
+        ok: false,
+        powerbankUsedToday: true,
+        message: "⚠️ Сегодня уже был использован PowerBank, получение невозможно",
+      });
+    }
+
+    // 3. Уже получен PowerBank
     if (ep_reward_claimed) {
       return res.status(200).json({
         ok: false,
@@ -37,6 +64,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // 4. Цели уже удвоены
     if (double_goal) {
       return res.status(200).json({
         ok: false,
@@ -45,6 +73,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // 5. Недостаточно EP
     if (ep < 1000) {
       return res.status(200).json({
         ok: false,
@@ -54,6 +83,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // 6. Вставка PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -72,6 +102,7 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка создания PowerBank" });
     }
 
+    // 7. Обновление активности
     const { error: updateError } = await supabase
       .from("user_activity")
       .upsert({
