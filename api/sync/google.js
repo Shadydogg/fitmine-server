@@ -44,6 +44,7 @@ module.exports = async (req, res) => {
     if (isExpired) {
       const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
       if (!new_token) {
+        console.warn('⚠️ Ошибка обновления токена:', refreshError);
         await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
         return res.status(401).json({ ok: false, error: 'Google token expired', need_reauth: true });
       }
@@ -89,6 +90,11 @@ module.exports = async (req, res) => {
       }
     }
 
+    steps = Number(steps) || 0;
+    calories = Number(calories) || 0;
+    minutes = Number(minutes) || 0;
+    distance = Number(distance) || 0;
+
     // 🧠 Получаем флаги активности
     const today = new Date().toISOString().slice(0, 10);
     const { data: currentActivity, error: fetchError } = await supabase
@@ -104,12 +110,15 @@ module.exports = async (req, res) => {
 
     const doubleGoal = currentActivity?.double_goal || false;
     const epFrozen = currentActivity?.ep_frozen || false;
-
     const allowEPOverwrite = !(doubleGoal || epFrozen);
 
     if (!allowEPOverwrite) {
       console.log("🛡️ PowerBank или double_goal активны — EP защищён");
     }
+
+    console.log('📊 Сохраняем активность:', {
+      telegram_id, steps, calories, minutes, distance, allowEPOverwrite
+    });
 
     const { error: saveError } = await storeUserActivity(telegram_id, {
       steps,
