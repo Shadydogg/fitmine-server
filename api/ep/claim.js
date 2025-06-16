@@ -111,6 +111,7 @@ module.exports = async function handler(req, res) {
         ep: 0,
         ep_reward_claimed: true,
         double_goal: true,
+        ep_frozen: false, // ✅ Сброс: теперь можно снова накапливать EP
         updated_at: new Date().toISOString(),
       }, {
         onConflict: ['telegram_id', 'date']
