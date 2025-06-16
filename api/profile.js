@@ -1,4 +1,4 @@
-// /api/profile.js — v2.3.0
+// /api/profile.js — v2.3.1 (Fixed: avatar_url removed)
 const express = require('express');
 const supabase = require('../lib/supabase');
 const verifyAccessToken = require('../lib/verifyAccessToken');
@@ -10,10 +10,9 @@ router.get('/', async (req, res) => {
     const payload = await verifyAccessToken(req);
     const telegram_id = payload.telegram_id;
 
-    // 🧩 Получаем профиль
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, username, avatar_url, is_premium, created_at') // 🔐 явное перечисление
+      .select('id, username, is_premium, created_at') // 🛠️ removed avatar_url
       .eq('telegram_id', telegram_id)
       .single();
 
@@ -22,7 +21,6 @@ router.get('/', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'User not found' });
     }
 
-    // 🔍 Проверка подключения Google Fit
     const { data: googleData, error: googleError } = await supabase
       .from('google_tokens')
       .select('access_token, expire_at')
