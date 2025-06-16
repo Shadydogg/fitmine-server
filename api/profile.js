@@ -1,19 +1,19 @@
-// /api/profile.js — v2.2.0 (JWT авторизация через verifyAccessToken + Google Connected)
+// /api/profile.js — v2.3.0
 const express = require('express');
 const supabase = require('../lib/supabase');
-const verifyAccessToken = require('../lib/verifyAccessToken'); // ✅
+const verifyAccessToken = require('../lib/verifyAccessToken');
 
 const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const payload = await verifyAccessToken(req); // ✅ telegram_id + jti проверены
+    const payload = await verifyAccessToken(req);
     const telegram_id = payload.telegram_id;
 
-    // 🧩 Получаем пользователя из таблицы users
+    // 🧩 Получаем профиль
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('*')
+      .select('id, username, avatar_url, is_premium, created_at') // 🔐 явное перечисление
       .eq('telegram_id', telegram_id)
       .single();
 
@@ -22,10 +22,10 @@ router.get('/', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'User not found' });
     }
 
-    // 🔍 Проверяем наличие токена Google Fit
+    // 🔍 Проверка подключения Google Fit
     const { data: googleData, error: googleError } = await supabase
       .from('google_tokens')
-      .select('access_token')
+      .select('access_token, expire_at')
       .eq('telegram_id', telegram_id)
       .maybeSingle();
 
@@ -33,9 +33,9 @@ router.get('/', async (req, res) => {
       console.warn('⚠️ Ошибка при проверке Google Fit:', googleError.message);
     }
 
-    const google_connected = !!googleData?.access_token;
+    const google_connected = !!googleData?.access_token &&
+      (!googleData.expire_at || new Date(googleData.expire_at) > new Date());
 
-    // ✅ Возвращаем профиль с флагом google_connected
     return res.status(200).json({
       ok: true,
       user: {
