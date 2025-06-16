@@ -1,4 +1,4 @@
-// /api/sync/google.js — v3.1.0
+// /api/sync/google.js — v3.2.0
 const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
@@ -27,18 +27,28 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Не удалось определить telegram_id' });
     }
 
-    // 🎫 Получение access_token
+    // 📦 Получение access_token и expire_at
     let { data: tokenData, error: tokenError } = await supabase
       .from('google_tokens')
-      .select('access_token')
+      .select('access_token, expire_at')
       .eq('telegram_id', telegram_id)
-      .single();
+      .maybeSingle();
 
     if (tokenError || !tokenData?.access_token) {
       return res.status(403).json({ ok: false, error: 'Google токен не найден' });
     }
 
     let access_token = tokenData.access_token;
+    const isExpired = new Date(tokenData.expire_at).getTime() < Date.now();
+
+    if (isExpired) {
+      const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
+      if (!new_token) {
+        await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
+        return res.status(401).json({ ok: false, error: 'Google token expired', need_reauth: true });
+      }
+      access_token = new_token;
+    }
 
     // ⏱️ Таймфрейм: сегодня
     const now = Date.now();
@@ -57,33 +67,12 @@ module.exports = async (req, res) => {
       endTimeMillis: now,
     };
 
-    let fitRes;
-    try {
-      fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          "Content-Type": "application/json",
-        },
-      });
-    } catch (error) {
-      const isExpired = error.response?.status === 401;
-      if (isExpired) {
-        const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
-        if (!new_token) {
-          await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
-          return res.status(401).json({ ok: false, error: 'Google token expired', need_reauth: true });
-        }
-        access_token = new_token;
-        fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
-          headers: {
-            Authorization: `Bearer ${access_token}`,
-            "Content-Type": "application/json",
-          },
-        });
-      } else {
-        throw error;
-      }
-    }
+    const fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "Content-Type": "application/json",
+      },
+    });
 
     const buckets = fitRes.data.bucket?.[0]?.dataset || [];
 
