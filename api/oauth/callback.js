@@ -1,3 +1,4 @@
+// /api/oauth/callback.js — v2.4.0
 const axios = require("axios");
 const { validate, parse } = require("@telegram-apps/init-data-node");
 const storeGoogleToken = require("../../lib/storeGoogleToken");
@@ -16,10 +17,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing code or state" });
     }
 
-    // ✅ Расшифровка initData
     const initDataRaw = Buffer.from(state, "base64").toString();
-
-    // ✅ Проверка подписи Telegram
     validate(initDataRaw, process.env.BOT_TOKEN);
     const parsed = parse(initDataRaw);
     const telegram_id = parsed?.user?.id;
@@ -31,7 +29,6 @@ module.exports = async (req, res) => {
 
     console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
 
-    // 🔁 Запрос токенов у Google
     const tokenRes = await axios.post("https://oauth2.googleapis.com/token", null, {
       params: {
         client_id: CLIENT_ID,
@@ -53,18 +50,14 @@ module.exports = async (req, res) => {
       token_type,
     } = tokenRes.data;
 
-    const expires_at = Date.now() + expires_in * 1000;
-
     console.log("✅ [Google] Токены получены");
 
-    // 💾 Сохраняем токены
     const { error: tokenSaveError } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
       scope,
       token_type,
-      expires_in,
-      expires_at,
+      expires_in, // ❗️ не передаём expires_at — он считается внутри storeGoogleToken.js
     });
 
     if (tokenSaveError) {
@@ -72,19 +65,8 @@ module.exports = async (req, res) => {
       return res.status(500).json({ ok: false, error: "Supabase token insert error" });
     }
 
-    // ✅ Обновляем users.google_connected = true
-    const { error: userUpdateError } = await supabase
-      .from("users")
-      .update({ google_connected: true, updated_at: new Date().toISOString() })
-      .eq("telegram_id", telegram_id);
-
-    if (userUpdateError) {
-      console.error("❌ [Supabase] Ошибка обновления пользователя:", userUpdateError);
-    }
-
     console.log("💾 [Supabase] Токены и статус подключения успешно сохранены");
 
-    // ✅ HTML-ответ для Telegram WebView
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(`
       <!DOCTYPE html>
