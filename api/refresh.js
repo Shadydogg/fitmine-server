@@ -1,4 +1,3 @@
-// /api/refresh.js — v3.1.0
 const express = require('express');
 const { verifyToken, generateTokens } = require('../lib/jwt');
 const supabase = require('../lib/supabase');
@@ -16,7 +15,7 @@ router.post('/', async (req, res) => {
 
     let payload;
     try {
-      payload = verifyToken(token); // проверка refresh_token
+      payload = verifyToken(token);
     } catch (err) {
       return res.status(401).json({ error: 'Invalid or expired refresh_token' });
     }
@@ -36,6 +35,10 @@ router.post('/', async (req, res) => {
     }
 
     const { access_token, refresh_token, jti: newJti } = generateTokens({ telegram_id });
+
+    if (!access_token || !refresh_token || !newJti) {
+      return res.status(500).json({ error: 'Token generation failed' });
+    }
 
     const { error: revokeError } = await supabase
       .from('token_sessions')
