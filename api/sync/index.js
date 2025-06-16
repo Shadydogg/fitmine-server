@@ -1,4 +1,3 @@
-// /api/sync/index.js — v1.2.0
 const supabase = require('../../lib/supabase');
 const jwt = require('jsonwebtoken');
 
@@ -7,7 +6,7 @@ module.exports = async (req, res) => {
     const authHeader = req.headers.authorization || '';
     const [type, token] = authHeader.split(' ');
 
-    if (!token || (type !== 'Bearer' && type !== 'bearer')) {
+    if (!token || (type.toLowerCase() !== 'bearer')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -16,7 +15,7 @@ module.exports = async (req, res) => {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    // 📦 Активность
+    // 📦 user_activity
     const { data: activity, error: activityError } = await supabase
       .from('user_activity')
       .select('steps, calories, distance, active_minutes, ep, double_goal')
@@ -32,7 +31,7 @@ module.exports = async (req, res) => {
     const doubleGoal = activity?.double_goal || false;
     const multiplier = doubleGoal ? 2 : 1;
 
-    // 📦 Профиль
+    // 📦 users
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('is_premium')
@@ -40,10 +39,10 @@ module.exports = async (req, res) => {
       .single();
 
     if (userError) {
-      console.error("❌ Ошибка получения профиля:", userError);
+      console.warn("⚠️ Ошибка получения профиля пользователя:", userError.message);
     }
 
-    // 📦 NFT
+    // 📦 nft_miners
     const { data: nft, error: nftError } = await supabase
       .from('nft_miners')
       .select('id')
@@ -51,10 +50,10 @@ module.exports = async (req, res) => {
       .limit(1);
 
     if (nftError) {
-      console.error("❌ Ошибка получения NFT:", nftError);
+      console.warn("⚠️ Ошибка получения NFT:", nftError.message);
     }
 
-    // ⚡ PowerBank
+    // ⚡ user_powerbanks
     const { data: powerbanks, error: pbError } = await supabase
       .from('user_powerbanks')
       .select('id')
@@ -62,7 +61,7 @@ module.exports = async (req, res) => {
       .eq('used', false);
 
     if (pbError) {
-      console.error("❌ Ошибка получения PowerBanks:", pbError);
+      console.warn("⚠️ Ошибка получения PowerBanks:", pbError.message);
     }
 
     const powerbankCount = Array.isArray(powerbanks) ? powerbanks.length : 0;
