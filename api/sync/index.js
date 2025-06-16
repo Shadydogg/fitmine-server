@@ -1,4 +1,4 @@
-// /api/sync/index.js — v1.1.0
+// /api/sync/index.js — v1.2.0
 const supabase = require('../../lib/supabase');
 const jwt = require('jsonwebtoken');
 
@@ -7,7 +7,7 @@ module.exports = async (req, res) => {
     const authHeader = req.headers.authorization || '';
     const [type, token] = authHeader.split(' ');
 
-    if (type !== 'Bearer' || !token) {
+    if (!token || (type !== 'Bearer' && type !== 'bearer')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -25,6 +25,7 @@ module.exports = async (req, res) => {
       .maybeSingle();
 
     if (activityError) {
+      console.error("❌ Ошибка получения активности:", activityError);
       return res.status(500).json({ error: 'Failed to fetch activity' });
     }
 
@@ -38,6 +39,10 @@ module.exports = async (req, res) => {
       .eq('telegram_id', telegram_id)
       .single();
 
+    if (userError) {
+      console.error("❌ Ошибка получения профиля:", userError);
+    }
+
     // 📦 NFT
     const { data: nft, error: nftError } = await supabase
       .from('nft_miners')
@@ -45,12 +50,20 @@ module.exports = async (req, res) => {
       .eq('telegram_id', telegram_id)
       .limit(1);
 
+    if (nftError) {
+      console.error("❌ Ошибка получения NFT:", nftError);
+    }
+
     // ⚡ PowerBank
     const { data: powerbanks, error: pbError } = await supabase
       .from('user_powerbanks')
       .select('id')
       .eq('telegram_id', telegram_id)
       .eq('used', false);
+
+    if (pbError) {
+      console.error("❌ Ошибка получения PowerBanks:", pbError);
+    }
 
     const powerbankCount = Array.isArray(powerbanks) ? powerbanks.length : 0;
 
@@ -67,11 +80,11 @@ module.exports = async (req, res) => {
       double_goal: doubleGoal,
       hasNFT: !!nft?.length,
       isPremium: !!user?.is_premium,
-      powerbankCount, // ✅ добавлено
+      powerbankCount,
     });
 
   } catch (err) {
-    console.error('❌ /api/sync error:', err);
+    console.error('❌ /api/sync error:', err.message || err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 };
