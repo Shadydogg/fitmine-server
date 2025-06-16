@@ -1,4 +1,4 @@
-// /api/sync/google.js — v3.0.0
+// /api/sync/google.js — v3.1.0
 const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
@@ -15,41 +15,32 @@ module.exports = async (req, res) => {
 
     let telegram_id = null;
 
-    // 🔐 Определение telegram_id
     if (type === 'Bearer') {
-      try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET);
-        telegram_id = payload.telegram_id;
-      } catch {
-        return res.status(401).json({ ok: false, error: 'Неверный JWT токен' });
-      }
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      telegram_id = payload.telegram_id;
     } else if (type === 'tma') {
-      try {
-        const initData = parse(token);
-        telegram_id = initData.user?.id;
-      } catch {
-        return res.status(401).json({ ok: false, error: 'Неверный initData' });
-      }
+      const initData = parse(token);
+      telegram_id = initData.user?.id;
     }
 
     if (!telegram_id) {
       return res.status(401).json({ ok: false, error: 'Не удалось определить telegram_id' });
     }
 
-    // 📥 Получение токенов из Supabase
-    let { data: tokenData, error } = await supabase
+    // 🎫 Получение access_token
+    let { data: tokenData, error: tokenError } = await supabase
       .from('google_tokens')
       .select('access_token')
       .eq('telegram_id', telegram_id)
       .single();
 
-    if (error || !tokenData?.access_token) {
+    if (tokenError || !tokenData?.access_token) {
       return res.status(403).json({ ok: false, error: 'Google токен не найден' });
     }
 
     let access_token = tokenData.access_token;
 
-    // 🕐 Таймфрейм данных
+    // ⏱️ Таймфрейм: сегодня
     const now = Date.now();
     const startTime = new Date();
     startTime.setHours(0, 0, 0, 0);
@@ -63,11 +54,10 @@ module.exports = async (req, res) => {
       ],
       bucketByTime: { durationMillis: 86400000 },
       startTimeMillis: startTime.getTime(),
-      endTimeMillis: now
+      endTimeMillis: now,
     };
 
     let fitRes;
-
     try {
       fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
         headers: {
@@ -77,28 +67,13 @@ module.exports = async (req, res) => {
       });
     } catch (error) {
       const isExpired = error.response?.status === 401;
-      const isRevoked =
-        error.response?.data?.error === 'invalid_grant' ||
-        error.response?.data?.error_description?.includes('expired') ||
-        error.response?.data?.error_description?.includes('revoked');
-
-      if (isExpired || isRevoked) {
-        console.warn('⚠️ Access token просрочен или отозван, пробуем обновить...');
-
+      if (isExpired) {
         const { access_token: new_token, error: refreshError } = await refreshGoogleToken(telegram_id);
-
-        if (refreshError || !new_token) {
-          console.error('❌ Ошибка обновления токена Google:', refreshError);
+        if (!new_token) {
           await supabase.from('google_tokens').delete().eq('telegram_id', telegram_id);
-          return res.status(401).json({
-            ok: false,
-            error: 'Google token expired or revoked',
-            need_reauth: true,
-          });
+          return res.status(401).json({ ok: false, error: 'Google token expired', need_reauth: true });
         }
-
         access_token = new_token;
-
         fitRes = await axios.post(GOOGLE_DATA_SOURCE, body, {
           headers: {
             Authorization: `Bearer ${access_token}`,
@@ -115,45 +90,45 @@ module.exports = async (req, res) => {
     let steps = 0, calories = 0, minutes = 0, distance = 0;
 
     for (const dataset of buckets) {
-      const point = dataset.point?.[0];
-      if (!point) continue;
-
-      const val = point.value?.[0]?.intVal ?? point.value?.[0]?.fpVal ?? 0;
-
-      if (dataset.dataSourceId.includes('step_count')) steps = val;
-      else if (dataset.dataSourceId.includes('calories')) calories = val;
-      else if (dataset.dataSourceId.includes('active_minutes')) minutes = val;
-      else if (dataset.dataSourceId.includes('distance')) distance = val;
+      const points = dataset.point || [];
+      for (const point of points) {
+        const val = point.value?.[0]?.intVal ?? point.value?.[0]?.fpVal ?? 0;
+        if (dataset.dataSourceId.includes('step_count')) steps += val;
+        else if (dataset.dataSourceId.includes('calories')) calories += val;
+        else if (dataset.dataSourceId.includes('active_minutes')) minutes += val;
+        else if (dataset.dataSourceId.includes('distance')) distance += val;
+      }
     }
 
-    // 🧠 Получаем текущий user_activity (для проверки double_goal)
+    // 🧠 Получаем флаги активности
     const today = new Date().toISOString().slice(0, 10);
     const { data: currentActivity, error: fetchError } = await supabase
       .from('user_activity')
-      .select('ep, double_goal')
+      .select('ep, double_goal, ep_frozen')
       .eq('telegram_id', telegram_id)
       .eq('date', today)
       .maybeSingle();
 
     if (fetchError) {
-      console.error("❌ Ошибка загрузки текущей активности:", fetchError);
+      console.error("❌ Ошибка получения активности:", fetchError);
     }
 
-    let allowEPOverwrite = true;
+    const doubleGoal = currentActivity?.double_goal || false;
+    const epFrozen = currentActivity?.ep_frozen || false;
 
-    if (currentActivity?.double_goal) {
-      console.log("🛡️ PowerBank активен сегодня — EP не перезаписываем");
-      allowEPOverwrite = false;
+    const allowEPOverwrite = !(doubleGoal || epFrozen);
+
+    if (!allowEPOverwrite) {
+      console.log("🛡️ PowerBank или double_goal активны — EP защищён");
     }
 
-    // 💾 Сохраняем активность
     const { error: saveError } = await storeUserActivity(telegram_id, {
       steps,
       calories,
       active_minutes: minutes,
       distance,
       source: 'google_fit',
-      allowEPOverwrite, // ✅ Новое поле
+      allowEPOverwrite,
     });
 
     if (saveError) {
@@ -166,11 +141,11 @@ module.exports = async (req, res) => {
       calories,
       minutes,
       distance,
-      date: new Date().toISOString(),
+      date: today,
     });
 
   } catch (err) {
-    console.error('❌ Ошибка синхронизации Google Fit:', err.message);
+    console.error('❌ Ошибка /api/sync/google:', err.message || err);
     return res.status(500).json({ ok: false, error: 'Google Fit sync error' });
   }
 };
