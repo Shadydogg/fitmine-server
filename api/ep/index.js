@@ -1,4 +1,4 @@
-// /api/ep/index.js — v2.2.0
+// /api/ep/index.js — v2.3.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
 
     const { data: activity, error } = await supabase
       .from("user_activity")
-      .select("ep, double_goal, ep_reward_claimed")
+      .select("ep, double_goal, ep_reward_claimed, ep_frozen")
       .eq("telegram_id", telegram_id)
       .eq("date", today)
       .maybeSingle();
@@ -28,6 +28,7 @@ module.exports = async function handler(req, res) {
       ep: activity?.ep || 0,
       double_goal: !!activity?.double_goal,
       ep_reward_claimed: !!activity?.ep_reward_claimed,
+      ep_frozen: !!activity?.ep_frozen,
     });
   } catch (err) {
     console.error("❌ /api/ep/index ERROR:", err);
