@@ -1,8 +1,6 @@
-// /api/oauth/callback.js — v2.4.0
 const axios = require("axios");
 const { validate, parse } = require("@telegram-apps/init-data-node");
 const storeGoogleToken = require("../../lib/storeGoogleToken");
-const supabase = require("../../lib/supabase");
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -17,6 +15,7 @@ module.exports = async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing code or state" });
     }
 
+    // ✅ Расшифровка состояния
     const initDataRaw = Buffer.from(state, "base64").toString();
     validate(initDataRaw, process.env.BOT_TOKEN);
     const parsed = parse(initDataRaw);
@@ -29,6 +28,7 @@ module.exports = async (req, res) => {
 
     console.log(`🔐 [OAuth Callback] telegram_id: ${telegram_id}`);
 
+    // 🔁 Запрос токенов у Google
     const tokenRes = await axios.post("https://oauth2.googleapis.com/token", null, {
       params: {
         client_id: CLIENT_ID,
@@ -52,12 +52,13 @@ module.exports = async (req, res) => {
 
     console.log("✅ [Google] Токены получены");
 
+    // 💾 Сохраняем токены через storeGoogleToken
     const { error: tokenSaveError } = await storeGoogleToken(telegram_id, {
       access_token,
       refresh_token,
       scope,
       token_type,
-      expires_in, // ❗️ не передаём expires_at — он считается внутри storeGoogleToken.js
+      expires_in, // ❗️ storeGoogleToken сам вычисляет expire_at
     });
 
     if (tokenSaveError) {
@@ -67,6 +68,7 @@ module.exports = async (req, res) => {
 
     console.log("💾 [Supabase] Токены и статус подключения успешно сохранены");
 
+    // ✅ HTML ответ для Telegram WebView
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(`
       <!DOCTYPE html>
@@ -99,6 +101,7 @@ module.exports = async (req, res) => {
         </body>
       </html>
     `);
+
   } catch (err) {
     console.error("❌ [OAuth Callback] Ошибка:", err.response?.data || err.message);
     return res.status(500).json({ ok: false, error: "OAuth callback failed" });
