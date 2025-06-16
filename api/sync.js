@@ -1,3 +1,4 @@
+// /api/sync/index.js — v1.3.0
 const express = require("express");
 const supabase = require("../lib/supabase");
 const verifyAccessToken = require("../lib/verifyAccessToken");
@@ -11,10 +12,10 @@ router.post("/", async (req, res) => {
     const payload = await verifyAccessToken(req);
     const telegram_id = payload.telegram_id;
 
-    // Получаем профиль пользователя
+    // 🧩 Получение профиля
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("*")
+      .select("id, is_premium")
       .eq("telegram_id", telegram_id)
       .single();
 
@@ -23,56 +24,60 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Получаем активность за сегодня
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date().toISOString().slice(0, 10);
 
+    // 📦 Активность
     const { data: activity, error: activityError } = await supabase
       .from("user_activity")
-      .select("*")
+      .select("steps, calories, distance, active_minutes, ep, double_goal, ep_frozen")
       .eq("telegram_id", telegram_id)
-      .gte("date", today.toISOString())
-      .order("date", { ascending: false })
-      .limit(1)
-      .single();
+      .eq("date", today)
+      .maybeSingle();
 
     if (activityError) {
       console.warn("⚠️ Нет данных активности:", activityError.message);
     }
 
-    // 🔁 Учитываем double_goal
     const doubleGoal = activity?.double_goal || false;
     const multiplier = doubleGoal ? 2 : 1;
 
-    // Метрики активности (с fallback)
-    const steps = activity?.steps ?? 0;
-    const calories = activity?.calories ?? 0;
-    const distance = activity?.distance ?? 0; // в метрах
-    const minutes = activity?.active_minutes ?? 0;
+    // 📦 NFT
+    const { data: nft, error: nftError } = await supabase
+      .from("nft_miners")
+      .select("id")
+      .eq("telegram_id", telegram_id)
+      .limit(1);
 
-    // Статус пользователя
-    const hasNFT = Boolean(user.hasNFT);
-    const isPremium = Boolean(user.is_premium);
-    const isEarlyAccess = Boolean(user.isEarlyAccess);
+    // ⚡ PowerBanks
+    const { data: powerbanks, error: pbError } = await supabase
+      .from("user_powerbanks")
+      .select("id")
+      .eq("telegram_id", telegram_id)
+      .eq("used", false);
+
+    const powerbankCount = Array.isArray(powerbanks) ? powerbanks.length : 0;
 
     return res.status(200).json({
       ok: true,
-      steps,
+      steps: activity?.steps || 0,
       stepsGoal: 10000 * multiplier,
-      calories,
+      calories: activity?.calories || 0,
       caloriesGoal: 2000 * multiplier,
-      distance,
+      distance: activity?.distance || 0,
       distanceGoal: 5 * multiplier,
-      minutes,
+      minutes: activity?.active_minutes || 0,
       minutesGoal: 45 * multiplier,
+      ep: activity?.ep || 0,
+      ep_frozen: activity?.ep_frozen || false,
       double_goal: doubleGoal,
-      hasNFT,
-      isPremium,
-      isEarlyAccess,
+      hasNFT: !!nft?.length,
+      isPremium: !!user?.is_premium,
+      powerbankCount,
     });
+
   } catch (err) {
-    console.error("❌ Ошибка /api/sync:", err.message);
-    return res.status(401).json({ error: err.message });
+    console.error("❌ /api/sync error:", err.message || err);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
