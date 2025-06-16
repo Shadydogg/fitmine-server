@@ -1,4 +1,4 @@
-// refresh.js — v3.0.0
+// /api/refresh.js — v3.1.0
 const express = require('express');
 const { verifyToken, generateTokens } = require('../lib/jwt');
 const supabase = require('../lib/supabase');
@@ -23,8 +23,7 @@ router.post('/', async (req, res) => {
 
     const { telegram_id, jti: oldJti } = payload;
 
-    // 🔒 Проверка, что сессия существует и не отозвана
-    const { data: session, error } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('token_sessions')
       .select('*')
       .eq('jti', oldJti)
@@ -32,18 +31,21 @@ router.post('/', async (req, res) => {
       .eq('revoked', false)
       .maybeSingle();
 
-    if (error || !session) {
+    if (sessionError || !session) {
       return res.status(403).json({ error: 'Session revoked or not found' });
     }
 
-    // 🆕 Генерация новой пары токенов
     const { access_token, refresh_token, jti: newJti } = generateTokens({ telegram_id });
 
-    // 💾 Обновляем сессию: текущую ревокуем, новую сохраняем
     const { error: revokeError } = await supabase
       .from('token_sessions')
       .update({ revoked: true })
-      .eq('jti', oldJti);
+      .eq('jti', oldJti)
+      .eq('telegram_id', telegram_id);
+
+    if (revokeError) {
+      console.warn('⚠️ Ошибка при ревокации старой сессии:', revokeError);
+    }
 
     const { error: insertError } = await supabase
       .from('token_sessions')
@@ -54,8 +56,8 @@ router.post('/', async (req, res) => {
         revoked: false
       });
 
-    if (revokeError || insertError) {
-      console.warn('⚠️ Ошибка при обновлении сессий');
+    if (insertError) {
+      console.warn('⚠️ Ошибка при вставке новой сессии:', insertError);
     }
 
     return res.status(200).json({
