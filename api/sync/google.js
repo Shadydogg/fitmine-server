@@ -1,4 +1,4 @@
-// /api/sync/google.js — v3.2.0
+// /api/sync/google.js — v3.3.0
 const supabase = require('../../lib/supabase');
 const axios = require('axios');
 const { parse } = require('@telegram-apps/init-data-node');
@@ -116,6 +116,14 @@ module.exports = async (req, res) => {
       console.log("🛡️ PowerBank или double_goal активны — EP защищён");
     }
 
+    if (!steps && !calories && !minutes && !distance) {
+      console.log("⛔ Пустые данные активности — пропуск записи");
+      return res.status(200).json({
+        ok: true,
+        steps, calories, minutes, distance, date: today, source: 'google_fit'
+      });
+    }
+
     console.log('📊 Сохраняем активность:', {
       telegram_id, steps, calories, minutes, distance, allowEPOverwrite
     });
@@ -140,6 +148,7 @@ module.exports = async (req, res) => {
       minutes,
       distance,
       date: today,
+      source: 'google_fit'
     });
 
   } catch (err) {
