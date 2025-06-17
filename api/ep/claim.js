@@ -1,3 +1,4 @@
+// /api/ep/claim.js — v3.0.0
 const supabase = require("../../lib/supabase");
 const verifyAccessToken = require("../../lib/verifyAccessToken");
 
@@ -83,7 +84,27 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 6. Вставка PowerBank
+    // 6. Создание записи в powerbank_rewards
+    const { data: rewardRow, error: rewardInsertError } = await supabase
+      .from("powerbank_rewards")
+      .insert({
+        telegram_id,
+        type: "ep_daily_goal",
+        source: "claim_api",
+        context: `daily_claim_${today}`,
+        created_at: new Date().toISOString(),
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (rewardInsertError || !rewardRow?.id) {
+      console.error("❌ Ошибка создания записи в powerbank_rewards:", rewardInsertError);
+      return res.status(500).json({ error: "Ошибка создания награды" });
+    }
+
+    const reward_id = rewardRow.id;
+
+    // 7. Вставка PowerBank
     const { data: inserted, error: insertError } = await supabase
       .from("user_powerbanks")
       .insert({
@@ -93,6 +114,7 @@ module.exports = async function handler(req, res) {
         powerbank_type: "basic",
         claimed_at: new Date().toISOString(),
         used: false,
+        reward_id,
       })
       .select("id")
       .maybeSingle();
@@ -102,7 +124,7 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка создания PowerBank" });
     }
 
-    // 7. Обновление активности
+    // 8. Обновление user_activity: обнуляем EP, отмечаем награду, НЕ замораживаем
     const { error: updateError } = await supabase
       .from("user_activity")
       .upsert({
@@ -111,10 +133,10 @@ module.exports = async function handler(req, res) {
         ep: 0,
         ep_reward_claimed: true,
         double_goal: true,
-        ep_frozen: false, // ✅ Сброс: теперь можно снова накапливать EP
+        ep_frozen: false,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: ['telegram_id', 'date']
+        onConflict: ['telegram_id', 'date'],
       });
 
     if (updateError) {
@@ -122,7 +144,7 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "Ошибка обновления активности" });
     }
 
-    console.log(`✅ PowerBank выдан: ${inserted.id} | EP = ${ep} | double_goal = true`);
+    console.log(`✅ PowerBank выдан: ${inserted.id} | double_goal=true | reward_id=${reward_id}`);
 
     return res.status(200).json({
       ok: true,
