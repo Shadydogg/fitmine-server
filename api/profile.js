@@ -1,4 +1,3 @@
-// /api/profile.js — v2.3.1
 const express = require('express');
 const supabase = require('../lib/supabase');
 const verifyAccessToken = require('../lib/verifyAccessToken');
@@ -13,7 +12,7 @@ router.get('/', async (req, res) => {
     // 📥 Получаем пользователя
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('*') // 💡 Выбираем всё как в v2.2.0
+      .select('*')
       .eq('telegram_id', telegram_id)
       .single();
 
@@ -22,25 +21,32 @@ router.get('/', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'User not found' });
     }
 
-    // 🔍 Проверяем наличие Google Fit
+    // 🔍 Проверяем состояние подключения Google Fit
     const { data: googleData, error: googleError } = await supabase
       .from('google_tokens')
-      .select('access_token, expire_at')
+      .select('access_token, expire_at, refresh_token')
       .eq('telegram_id', telegram_id)
       .maybeSingle();
 
     if (googleError) {
-      console.warn('⚠️ Ошибка при проверке Google Fit:', googleError.message);
+      console.warn('⚠️ Ошибка при получении Google токенов:', googleError.message);
     }
 
-    const google_connected = !!googleData?.access_token &&
-      (!googleData.expire_at || new Date(googleData.expire_at) > new Date());
+    const now = Date.now();
+    const expire_at_ts = googleData?.expire_at ? new Date(googleData.expire_at).getTime() : 0;
+    const isExpired = expire_at_ts > 0 && expire_at_ts < now;
+    const hasRefresh = !!googleData?.refresh_token;
 
+    const google_connected = !!googleData?.access_token && (!isExpired || hasRefresh);
+    const google_needs_reauth = isExpired && !hasRefresh;
+
+    // ✅ Возвращаем результат
     return res.status(200).json({
       ok: true,
       user: {
         ...user,
         google_connected,
+        google_needs_reauth,
       },
     });
 
